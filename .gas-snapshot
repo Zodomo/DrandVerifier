@@ -1,0 +1,7 @@
+DrandVerifierTest:testVerifyAcceptsLatestLiveDrandRoundViaFFI() (gas: 208466)
+DrandVerifierTest:testVerifyAcceptsValidCompressedQuicknetSignature() (gas: 148422)
+DrandVerifierTest:testVerifyAcceptsValidUncompressedQuicknetSignature() (gas: 138676)
+DrandVerifierTest:testVerifyRejectsDifferentRoundSignature() (gas: 138651)
+DrandVerifierTest:testVerifyRejectsInvalidSignatureLength() (gas: 7106)
+DrandVerifierTest:testVerifyRejectsTamperedLatestLiveDrandRoundViaFFI() (gas: 1040432495)
+DrandVerifierTest:testVerifyRejectsValidSignatureWhenRoundIsWrong() (gas: 282760)
