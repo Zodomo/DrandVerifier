@@ -167,7 +167,11 @@ contract LibBLSTest is Test {
         (LibBLS.Fp2 memory y, bool ok) = harness.fp2Sqrt(input.c1_hi, input.c1_lo, input.c0_hi, input.c0_lo);
 
         assertTrue(ok);
-        assertTrue(harness.fp2SquareEquals(y.c1_hi, y.c1_lo, y.c0_hi, y.c0_lo, input.c1_hi, input.c1_lo, input.c0_hi, input.c0_lo));
+        assertTrue(
+            harness.fp2SquareEquals(
+                y.c1_hi, y.c1_lo, y.c0_hi, y.c0_lo, input.c1_hi, input.c1_lo, input.c0_hi, input.c0_lo
+            )
+        );
     }
 
     function testFp2SqrtCanReturnFalse() public view {
@@ -202,10 +206,11 @@ contract LibBLSTest is Test {
                     for (uint256 bl = 0; bl < los.length && !found; bl++) {
                         if (his[bi] == 0 && los[bl] == 0) continue;
 
-                        (uint128 tHi, uint256 tLo, bool hasTSqrt) = harness.fp2NormSqrt(his[ai], los[al], his[bi], los[bl]);
+                        (uint128 tHi, uint256 tLo, bool hasTSqrt) =
+                            harness.fp2NormSqrt(his[ai], los[al], his[bi], los[bl]);
                         if (!hasTSqrt) continue;
 
-                        (, , bool hasY0) = harness.fp2SqrtRealComponent(his[ai], los[al], tHi, tLo);
+                        (,, bool hasY0) = harness.fp2SqrtRealComponent(his[ai], los[al], tHi, tLo);
                         if (!hasY0) {
                             (, bool ok) = harness.fp2SqrtImaginaryNonZero(his[bi], los[bl], his[ai], los[al]);
                             assertFalse(ok);
@@ -264,7 +269,7 @@ contract LibBLSTest is Test {
         assertEq(sqLo, 4);
 
         uint256 nonResidue = _findNonResidue();
-        (, , bool nrOk) = harness.fpSqrt(0, nonResidue);
+        (,, bool nrOk) = harness.fpSqrt(0, nonResidue);
         assertFalse(nrOk);
     }
 
@@ -384,18 +389,21 @@ contract LibBLSTest is Test {
         assertEq(keccak256(abi.encode(a0)), keccak256(abi.encode(b0)));
         assertEq(keccak256(abi.encode(a1)), keccak256(abi.encode(b1)));
 
-        (uint256[8] memory c0, uint256[8] memory c1) = harness.hashToPointG2Parts(DST, abi.encodePacked(bytes32(uint256(digest) ^ 1)));
+        (uint256[8] memory c0, uint256[8] memory c1) =
+            harness.hashToPointG2Parts(DST, abi.encodePacked(bytes32(uint256(digest) ^ 1)));
         assertTrue(keccak256(abi.encode(a0, a1)) != keccak256(abi.encode(c0, c1)));
     }
 
     function testHashToPointG2PartsCanRevertAtP0WithTightGasBudget() public {
-        bytes memory data = abi.encodeCall(LibBLSHarness.hashToPointG2Parts, (DST, abi.encodePacked(bytes32(uint256(1)))));
+        bytes memory data =
+            abi.encodeCall(LibBLSHarness.hashToPointG2Parts, (DST, abi.encodePacked(bytes32(uint256(1)))));
         bool found = _findReasonWithGasSweep(data, "map_fp2_to_g2 p0 failed", 10_000, 600_000, 2_000);
         assertTrue(found, "no gas budget hit map_fp2_to_g2 p0 failed");
     }
 
     function testHashToPointG2PartsCanRevertAtP1WithTightGasBudget() public {
-        bytes memory data = abi.encodeCall(LibBLSHarness.hashToPointG2Parts, (DST, abi.encodePacked(bytes32(uint256(1)))));
+        bytes memory data =
+            abi.encodeCall(LibBLSHarness.hashToPointG2Parts, (DST, abi.encodePacked(bytes32(uint256(1)))));
         bool found = _findReasonWithGasSweep(data, "map_fp2_to_g2 p1 failed", 10_000, 1_500_000, 2_000);
         assertTrue(found, "no gas budget hit map_fp2_to_g2 p1 failed");
     }
@@ -407,7 +415,8 @@ contract LibBLSTest is Test {
         bytes32 digest = verifierDefault.roundMessageHash(ROUND_ONE, PREV_SIG_ONE_COMPRESSED);
         (uint256[8] memory msg0, uint256[8] memory msg1) = harness.hashToPointG2Parts(DST, abi.encodePacked(digest));
 
-        (bool pairingSuccess, bool callSuccess) = harness.verifySingleG2(sigWords, verifierDefault.PUBLIC_KEY(), msg0, msg1);
+        (bool pairingSuccess, bool callSuccess) =
+            harness.verifySingleG2(sigWords, verifierDefault.PUBLIC_KEY(), msg0, msg1);
         assertTrue(callSuccess);
         assertTrue(pairingSuccess);
 
@@ -500,12 +509,14 @@ contract LibBLSTest is Test {
         _assertNotVerifiedOrReverted(tampered, verifierDefault.PUBLIC_KEY(), DST, digest);
     }
 
-    function _assertNotVerifiedOrReverted(bytes memory signature, BLS2.PointG1 memory pubkey, bytes memory dst, bytes32 digest)
-        internal
-        view
-    {
-        (bool success, bytes memory returnData) =
-            address(harness).staticcall(abi.encodeCall(LibBLSHarness.verifyDefaultSignature, (signature, pubkey, dst, digest)));
+    function _assertNotVerifiedOrReverted(
+        bytes memory signature,
+        BLS2.PointG1 memory pubkey,
+        bytes memory dst,
+        bytes32 digest
+    ) internal view {
+        (bool success, bytes memory returnData) = address(harness)
+            .staticcall(abi.encodeCall(LibBLSHarness.verifyDefaultSignature, (signature, pubkey, dst, digest)));
 
         if (success) {
             assertFalse(abi.decode(returnData, (bool)));
@@ -546,7 +557,7 @@ contract LibBLSTest is Test {
 
     function _findNonResidue() internal view returns (uint256) {
         for (uint256 x = 2; x < 256; x++) {
-            (, , bool hasRoot) = harness.fpSqrt(0, x);
+            (,, bool hasRoot) = harness.fpSqrt(0, x);
             if (!hasRoot) {
                 return x;
             }
@@ -571,8 +582,6 @@ contract LibBLSTest is Test {
     }
 
     function _isErrorReason(bytes memory returnData, string memory reason) internal pure returns (bool) {
-        return keccak256(returnData)
-            == keccak256(abi.encodeWithSelector(bytes4(keccak256("Error(string)")), reason));
+        return keccak256(returnData) == keccak256(abi.encodeWithSelector(bytes4(keccak256("Error(string)")), reason));
     }
-
 }

@@ -67,11 +67,12 @@ library LibBLS {
     /// @param dst The domain separation tag for hash-to-curve.
     /// @param digest The 32-byte message digest to verify (already chained-hashed by caller).
     /// @return True if parsing succeeds and pairing check validates; otherwise false.
-    function verifyDefaultSignature(bytes memory signature, BLS2.PointG1 memory pubkey, bytes memory dst, bytes32 digest)
-        internal
-        view
-        returns (bool)
-    {
+    function verifyDefaultSignature(
+        bytes memory signature,
+        BLS2.PointG1 memory pubkey,
+        bytes memory dst,
+        bytes32 digest
+    ) internal view returns (bool) {
         BLS2.PointG2 memory signaturePoint;
 
         if (signature.length == UNCOMPRESSED_G2_SIG_LENGTH) {
@@ -330,7 +331,11 @@ library LibBLS {
     /// @param bLo Low 256 bits of multiplicand b.
     /// @return outHi High 128 bits of product modulo p.
     /// @return outLo Low 256 bits of product modulo p.
-    function _fpMul(uint128 aHi, uint256 aLo, uint128 bHi, uint256 bLo) internal view returns (uint128 outHi, uint256 outLo) {
+    function _fpMul(uint128 aHi, uint256 aLo, uint128 bHi, uint256 bLo)
+        internal
+        view
+        returns (uint128 outHi, uint256 outLo)
+    {
         (uint128 sHi, uint256 sLo) = _fpAddMod(aHi, aLo, bHi, bLo);
         (uint128 s2Hi, uint256 s2Lo) = _fpSquare(sHi, sLo);
         (uint128 a2Hi, uint256 a2Lo) = _fpSquare(aHi, aLo);

@@ -14,8 +14,7 @@ contract DrandVerifierQuicknetTest is Test {
     DrandVerifierQuicknet internal verifier;
 
     // drand quicknet chain hash from official docs/API v2.
-    string internal constant QUICKNET_CHAIN_HASH =
-        "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971";
+    string internal constant QUICKNET_CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971";
 
     // Quicknet vector from vendored bls-solidity testcases.json (round 20791007).
     uint64 internal constant ROUND_ONE = 20791007;
@@ -30,8 +29,7 @@ contract DrandVerifierQuicknetTest is Test {
         hex"0a60486975062d9f06633c284cf1a7b46fb343f56f329f180530ca40a9e86320244f4fbfc37ae866cf25ef499665a31f08c61b5471ed86344d6b347d1b0e1a4146877a57c28507448678d8249521d91be74cd5a44fb6fce5f869b235e085ebe6";
 
     uint128 internal constant FIELD_P_HI = 0x1a0111ea397fe69a4b1ba7b6434bacd7;
-    uint256 internal constant FIELD_P_LO =
-        0x64774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab;
+    uint256 internal constant FIELD_P_LO = 0x64774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab;
 
     function setUp() public {
         verifier = new DrandVerifierQuicknet();
@@ -77,7 +75,9 @@ contract DrandVerifierQuicknetTest is Test {
     }
 
     function testRoundMessageHashMatchesKnownQuicknetVector() public view {
-        assertEq(verifier.roundMessageHash(ROUND_ONE), 0xeb26460c7495053b531c3d007789953c47874f3380635090554e0f68619bbbeb);
+        assertEq(
+            verifier.roundMessageHash(ROUND_ONE), 0xeb26460c7495053b531c3d007789953c47874f3380635090554e0f68619bbbeb
+        );
     }
 
     function testDecompressSignatureReturnsExpectedUncompressedBytes() public view {

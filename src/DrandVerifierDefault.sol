@@ -49,12 +49,7 @@ contract DrandVerifierDefault is IDrandVerifierDefault {
     /// @param round The drand round number.
     /// @param previousSig The previous round signature bytes from drand beacon payload.
     /// @param sig The current round signature bytes in compressed (96) or uncompressed (192) G2 form.
-    function verify(uint64 round, bytes calldata previousSig, bytes calldata sig)
-        public
-        view
-        override
-        returns (bool)
-    {
+    function verify(uint64 round, bytes calldata previousSig, bytes calldata sig) public view override returns (bool) {
         if (previousSig.length != COMPRESSED_G2_SIG_LENGTH) return false;
 
         bytes32 digest = roundMessageHash(round, previousSig);

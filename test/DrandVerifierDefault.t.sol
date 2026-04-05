@@ -13,8 +13,7 @@ contract DrandVerifierDefaultTest is Test {
 
     DrandVerifierDefault internal verifier;
 
-    string internal constant DEFAULT_CHAIN_HASH =
-        "8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce";
+    string internal constant DEFAULT_CHAIN_HASH = "8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce";
 
     uint64 internal constant ROUND_ONE = 5997160;
     bytes internal constant PREV_SIG_ONE_COMPRESSED =
@@ -33,8 +32,7 @@ contract DrandVerifierDefaultTest is Test {
         hex"195ea514d3b495c018c66e53f90fbe7f6e5873d0c0c4be20590fe02b607f6613de7f8baaa47681c1bd16715cf1366bad0c1c3519e792767cf83aa2b7dd8d934ed449388e969572e012e7335af08a165080ebbc67449f1e5b9e6afb8f0dfa1045097e27ed7a8b89e5bf450c1632423d1753d579d5e0ef85b10c2825afafdb589e1b4062fc75dc9c41f8c01932aa5f0bd0154e72d7d619a5318f437ab53604674a478141abf87ff8f0c1aa2c7da4d42a5049cef096a07216713967040a00fd565f";
 
     uint128 internal constant FIELD_P_HI = 0x1a0111ea397fe69a4b1ba7b6434bacd7;
-    uint256 internal constant FIELD_P_LO =
-        0x64774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab;
+    uint256 internal constant FIELD_P_LO = 0x64774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab;
 
     function setUp() public {
         verifier = new DrandVerifierDefault();
@@ -105,11 +103,17 @@ contract DrandVerifierDefaultTest is Test {
     }
 
     function testRoundMessageHashMatchesKnownDefaultVector() public view {
-        assertEq(verifier.roundMessageHash(ROUND_ONE, PREV_SIG_ONE_COMPRESSED), 0xa8b50e95a8aa82f80576670c03e42c20f98401bcc92ab35feed94ce3afcf7930);
+        assertEq(
+            verifier.roundMessageHash(ROUND_ONE, PREV_SIG_ONE_COMPRESSED),
+            0xa8b50e95a8aa82f80576670c03e42c20f98401bcc92ab35feed94ce3afcf7930
+        );
     }
 
     function testRoundMessageHashMatchesSecondKnownDefaultVector() public view {
-        assertEq(verifier.roundMessageHash(ROUND_TWO, PREV_SIG_TWO_COMPRESSED), 0x2f85f37a934d1b91e2940221170a0963383403953995a526cd89716740e90fda);
+        assertEq(
+            verifier.roundMessageHash(ROUND_TWO, PREV_SIG_TWO_COMPRESSED),
+            0x2f85f37a934d1b91e2940221170a0963383403953995a526cd89716740e90fda
+        );
     }
 
     function testDecompressSignatureReturnsExpectedUncompressedBytesRoundOne() public view {
@@ -249,7 +253,10 @@ contract DrandVerifierDefaultTest is Test {
     }
 
     /// forge-config: default.fuzz.runs = 32
-    function testFuzzVerifyRejectsRandomPreviousSignature(uint64 round, bytes32 p0, bytes32 p1, bytes32 p2) public view {
+    function testFuzzVerifyRejectsRandomPreviousSignature(uint64 round, bytes32 p0, bytes32 p1, bytes32 p2)
+        public
+        view
+    {
         bytes memory randomPrevious = abi.encodePacked(p0, p1, p2);
         bytes32 prevHash = keccak256(randomPrevious);
 
@@ -279,16 +286,24 @@ contract DrandVerifierDefaultTest is Test {
 
     /// @notice Fetches latest drand default round over FFI and verifies the live signature.
     function testVerifyAcceptsLatestLiveDefaultRoundViaFFI() public {
-        (uint64 round, bytes memory previousSignature, bytes memory signatureCompressed, bytes memory signatureUncompressed) =
-            _fetchLatestDefaultRoundFromApi();
+        (
+            uint64 round,
+            bytes memory previousSignature,
+            bytes memory signatureCompressed,
+            bytes memory signatureUncompressed
+        ) = _fetchLatestDefaultRoundFromApi();
         assertTrue(verifier.verify(round, previousSignature, signatureUncompressed));
         assertTrue(verifier.verify(round, previousSignature, signatureCompressed));
     }
 
     /// @notice Confirms tampering a live default network signature causes verification failure.
     function testVerifyRejectsTamperedLatestLiveDefaultRoundViaFFI() public {
-        (uint64 round, bytes memory previousSignature, bytes memory signatureCompressed, bytes memory signatureUncompressed) =
-            _fetchLatestDefaultRoundFromApi();
+        (
+            uint64 round,
+            bytes memory previousSignature,
+            bytes memory signatureCompressed,
+            bytes memory signatureUncompressed
+        ) = _fetchLatestDefaultRoundFromApi();
         signatureUncompressed[0] = bytes1(uint8(signatureUncompressed[0]) ^ 0x01);
         signatureCompressed[0] = bytes1(uint8(signatureCompressed[0]) ^ 0x01);
 
@@ -299,7 +314,7 @@ contract DrandVerifierDefaultTest is Test {
     }
 
     function testDecompressSignatureMatchesFFIForLatestLiveDefaultRound() public {
-        (, , bytes memory signatureCompressed, ) = _fetchLatestDefaultRoundFromApi();
+        (,, bytes memory signatureCompressed,) = _fetchLatestDefaultRoundFromApi();
         bytes memory fromContract = verifier.decompressSignature(signatureCompressed);
         bytes memory fromFfi = _decompressG2SignatureViaFFI(signatureCompressed);
         assertEq(fromContract, fromFfi);
@@ -307,7 +322,12 @@ contract DrandVerifierDefaultTest is Test {
 
     function _fetchLatestDefaultRoundFromApi()
         internal
-        returns (uint64 round, bytes memory previousSignature, bytes memory signatureCompressed, bytes memory signatureUncompressed)
+        returns (
+            uint64 round,
+            bytes memory previousSignature,
+            bytes memory signatureCompressed,
+            bytes memory signatureUncompressed
+        )
     {
         string[] memory command = new string[](3);
         command[0] = "curl";
@@ -342,9 +362,8 @@ contract DrandVerifierDefaultTest is Test {
         internal
         view
     {
-        (bool success, bytes memory returnData) = address(verifier).staticcall(
-            abi.encodeCall(DrandVerifierDefault.verify, (round, previousSignature, signature))
-        );
+        (bool success, bytes memory returnData) = address(verifier)
+            .staticcall(abi.encodeCall(DrandVerifierDefault.verify, (round, previousSignature, signature)));
 
         if (success) {
             assertFalse(abi.decode(returnData, (bool)));
@@ -375,5 +394,4 @@ contract DrandVerifierDefaultTest is Test {
             mstore(add(signature, 0x30), FIELD_P_LO)
         }
     }
-
 }

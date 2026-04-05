@@ -9,11 +9,12 @@ contract LibBLSHarness {
         return LibBLS.decompressG2Signature(compressedSig);
     }
 
-    function verifyDefaultSignature(bytes calldata signature, BLS2.PointG1 calldata pubkey, bytes calldata dst, bytes32 digest)
-        external
-        view
-        returns (bool)
-    {
+    function verifyDefaultSignature(
+        bytes calldata signature,
+        BLS2.PointG1 calldata pubkey,
+        bytes calldata dst,
+        bytes32 digest
+    ) external view returns (bool) {
         return LibBLS.verifyDefaultSignature(signature, pubkey, dst, digest);
     }
 
@@ -187,7 +188,11 @@ contract LibBLSHarness {
         return LibBLS._fp2Eq(a, b);
     }
 
-    function fp2Const(uint128 c1Hi, uint256 c1Lo, uint128 c0Hi, uint256 c0Lo) external pure returns (LibBLS.Fp2 memory out) {
+    function fp2Const(uint128 c1Hi, uint256 c1Lo, uint128 c0Hi, uint256 c0Lo)
+        external
+        pure
+        returns (LibBLS.Fp2 memory out)
+    {
         return LibBLS._fp2Const(c1Hi, c1Lo, c0Hi, c0Lo);
     }
 

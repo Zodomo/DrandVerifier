@@ -63,8 +63,7 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
             return false;
         }
 
-        BLS2.PointG1 memory messagePoint =
-            BLS2.hashToPoint(bytes(DST), abi.encodePacked(roundMessageHash(round)));
+        BLS2.PointG1 memory messagePoint = BLS2.hashToPoint(bytes(DST), abi.encodePacked(roundMessageHash(round)));
 
         (bool pairingSuccess, bool callSuccess) = BLS2.verifySingle(signaturePoint, PUBLIC_KEY(), messagePoint);
         return pairingSuccess && callSuccess;
