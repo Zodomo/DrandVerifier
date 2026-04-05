@@ -8,7 +8,7 @@ import {IDrandVerifierQuicknet} from "src/interfaces/IDrandVerifierQuicknet.sol"
 /// @notice Verifies drand quicknet BLS12-381 signatures using the vendored bls-solidity library.
 /// @dev Supports drand signatures encoded either as compressed G1 (48 bytes) or uncompressed G1 (96 bytes).
 contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
-    /// @notice Domain separation tag used by drand quicknet network for hash-to-curve.
+    /// @notice Domain separation tag used by drand quicknet for hash-to-curve.
     string public constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
     /// @notice Expected compressed G1 signature length in bytes.
@@ -17,7 +17,7 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     /// @notice Expected uncompressed G1 signature length in bytes.
     uint256 public constant UNCOMPRESSED_G1_SIG_LENGTH = 96;
 
-    /// @notice Returns drand quicknet network public key in G2 form.
+    /// @notice Returns drand quicknet public key in G2 form.
     /// @dev Matches the quicknet key used by bls-solidity's QuicknetRegistry demo.
     function PUBLIC_KEY() public pure override returns (BLS2.PointG2 memory) {
         return BLS2.PointG2(
@@ -48,8 +48,8 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     }
 
     /// @notice Verifies a drand quicknet signature for a given round.
-    /// @param round The drand round number as uint64.
-    /// @param sig The signature bytes (48-byte compressed G1 or 96-byte uncompressed G1).
+    /// @param round The drand round number.
+    /// @param sig The current round signature bytes in compressed (48) or uncompressed (96) G1 form.
     /// @return True when the signature is valid for the provided round and quicknet public key.
     function verify(uint64 round, bytes calldata sig) external view override returns (bool) {
         BLS2.PointG1 memory signaturePoint;

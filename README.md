@@ -16,17 +16,17 @@ Built with Foundry and the vendored [`randa-mu/bls-solidity`](https://github.com
   - Accepts **compressed** (48-byte) and **uncompressed** (96-byte) signatures.
   - Exposes `decompressSignature(...)` helper for offchain conversion.
 - `src/DrandVerifierDefault.sol`
-  - Default-network verifier.
+  - Default network verifier.
   - Verifies chained beacons using `round + previous_signature`.
   - Accepts **uncompressed G2** signatures (192 bytes).
 - `src/interfaces/IDrandVerifierQuicknet.sol`
   - Quicknet verifier interface.
 - `src/interfaces/IDrandVerifierDefault.sol`
-  - Default-network verifier interface.
+  - Default network verifier interface.
 - `test/DrandVerifierQuicknet.t.sol`
   - Quicknet unit/adversarial/fuzz/live-FFI coverage.
 - `test/DrandVerifierDefault.t.sol`
-  - Default-network unit/adversarial/fuzz/live-FFI coverage.
+  - Default network unit/adversarial/fuzz/live-FFI coverage.
 
 ---
 
