@@ -2,20 +2,20 @@
 pragma solidity ^0.8.34;
 
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
-import {IDrandVerifier} from "src/IDrandVerifier.sol";
+import {IDrandVerifierQuicknet} from "src/interfaces/IDrandVerifierQuicknet.sol";
 
-/// @title DrandVerifier
+/// @title DrandVerifierQuicknet
 /// @notice Verifies drand quicknet BLS12-381 signatures using the vendored bls-solidity library.
 /// @dev Supports drand signatures encoded either as compressed G1 (48 bytes) or uncompressed G1 (96 bytes).
-contract DrandVerifier is IDrandVerifier {
-    /// @notice Domain separation tag used by drand quicknet for hash-to-curve.
+contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
+    /// @notice Domain separation tag used by drand quicknet network for hash-to-curve.
     string public constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
     /// @notice Expected compressed G1 signature length in bytes.
-    uint256 public constant COMPRESSED_SIG_LENGTH = 48;
+    uint256 public constant COMPRESSED_G1_SIG_LENGTH = 48;
 
     /// @notice Expected uncompressed G1 signature length in bytes.
-    uint256 public constant UNCOMPRESSED_SIG_LENGTH = 96;
+    uint256 public constant UNCOMPRESSED_G1_SIG_LENGTH = 96;
 
     /// @notice Returns drand quicknet network public key in G2 form.
     /// @dev Matches the quicknet key used by bls-solidity's QuicknetRegistry demo.
@@ -55,9 +55,9 @@ contract DrandVerifier is IDrandVerifier {
         BLS2.PointG1 memory signaturePoint;
         uint256 signatureLength = sig.length;
 
-        if (signatureLength == UNCOMPRESSED_SIG_LENGTH) {
+        if (signatureLength == UNCOMPRESSED_G1_SIG_LENGTH) {
             signaturePoint = BLS2.g1Unmarshal(sig);
-        } else if (signatureLength == COMPRESSED_SIG_LENGTH) {
+        } else if (signatureLength == COMPRESSED_G1_SIG_LENGTH) {
             signaturePoint = BLS2.g1UnmarshalCompressed(sig);
         } else {
             return false;

@@ -4,14 +4,14 @@ pragma solidity ^0.8.34;
 import {Test} from "lib/forge-std/src/Test.sol";
 import {JSONParserLib} from "lib/solady/src/utils/JSONParserLib.sol";
 
-import {DrandVerifier} from "src/DrandVerifier.sol";
+import {DrandVerifierQuicknet} from "src/DrandVerifierQuicknet.sol";
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 
 /// @notice Foundry tests for drand quicknet signature verification.
-contract DrandVerifierTest is Test {
+contract DrandVerifierQuicknetTest is Test {
     using JSONParserLib for *;
 
-    DrandVerifier internal verifier;
+    DrandVerifierQuicknet internal verifier;
 
     // drand quicknet chain hash from official docs/API v2.
     string internal constant QUICKNET_CHAIN_HASH =
@@ -34,7 +34,7 @@ contract DrandVerifierTest is Test {
         0x64774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab;
 
     function setUp() public {
-        verifier = new DrandVerifier();
+        verifier = new DrandVerifierQuicknet();
     }
 
     function testVerifyAcceptsValidCompressedQuicknetSignature() public view {
@@ -193,7 +193,7 @@ contract DrandVerifierTest is Test {
 
     function _assertNotVerifiedOrReverted(uint64 round, bytes memory signature) internal view {
         (bool success, bytes memory returnData) =
-            address(verifier).staticcall(abi.encodeCall(DrandVerifier.verify, (round, signature)));
+            address(verifier).staticcall(abi.encodeCall(DrandVerifierQuicknet.verify, (round, signature)));
 
         if (success) {
             assertFalse(abi.decode(returnData, (bool)));

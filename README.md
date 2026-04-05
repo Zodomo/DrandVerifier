@@ -1,116 +1,140 @@
-# evm-drand-verifier
+# DrandVerifier
 
-Stateless Solidity verifier for **drand quicknet** BLS12-381 round signatures, built with Foundry using the vendored [`randa-mu/bls-solidity`](https://github.com/randa-mu/bls-solidity) library.
+Stateless Solidity verifiers for **two drand BLS12-381 networks**:
 
-This project gives you a minimal onchain primitive to answer one question:
+- **Quicknet** (`DrandVerifierQuicknet`)
+- **Default network** (`DrandVerifierDefault`, scheme `pedersen-bls-chained`)
 
-> “Is this drand quicknet signature valid for this round?”
+Built with Foundry and the vendored [`randa-mu/bls-solidity`](https://github.com/randa-mu/bls-solidity) library.
 
 ---
 
 ## What this project includes
 
-- `src/DrandVerifier.sol`
-  - Verifies quicknet signatures for a round.
-  - Accepts both **compressed** (48-byte) and **uncompressed** (96-byte) G1 signatures.
-  - Exposes `decompressSignature(...)` so callers can decompress offchain via `eth_call` and submit the cheaper uncompressed path onchain.
-- `src/IDrandVerifier.sol`
-  - Interface for integrating with `DrandVerifier` from other contracts.
-- `test/DrandVerifier.t.sol`
-  - Unit + adversarial + fuzz tests.
-  - Live FFI tests that fetch latest quicknet rounds from drand API and verify in-contract.
+- `src/DrandVerifierQuicknet.sol`
+  - Quicknet verifier.
+  - Accepts **compressed** (48-byte) and **uncompressed** (96-byte) signatures.
+  - Exposes `decompressSignature(...)` helper for offchain conversion.
+- `src/DrandVerifierDefault.sol`
+  - Default-network verifier.
+  - Verifies chained beacons using `round + previous_signature`.
+  - Accepts **uncompressed G2** signatures (192 bytes).
+- `src/interfaces/IDrandVerifierQuicknet.sol`
+  - Quicknet verifier interface.
+- `src/interfaces/IDrandVerifierDefault.sol`
+  - Default-network verifier interface.
+- `test/DrandVerifierQuicknet.t.sol`
+  - Quicknet unit/adversarial/fuzz/live-FFI coverage.
+- `test/DrandVerifierDefault.t.sol`
+  - Default-network unit/adversarial/fuzz/live-FFI coverage.
 
 ---
 
-## drand quicknet assumptions in this implementation
+## Why there are two verifier contracts
 
-This verifier is intentionally pinned to quicknet semantics:
+drand quicknet and drand default do not use the same verification shape onchain.
 
-- **DST**: `BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_`
-- **Round message hash**: `sha256(abi.encodePacked(uint64(round)))`
-- **Public key**: hardcoded quicknet G2 key (same as `bls-solidity` quicknet demo)
-- **Live test chain hash**: `52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971`
+### Quicknet (`bls-unchained-g1-rfc9380`)
 
-If you need a different drand network/key/DST, you should deploy a different verifier configuration.
+- Message digest: `sha256(uint64(round))`
+- Signature group: **G1**
+- Public key group: **G2**
+- Library fit: maps directly to `bls-solidity` G1-signature flow (`hashToPoint` on G1 + `verifySingle`)
+- Input convenience: supports compressed/uncompressed signature formats
+
+### Default (`pedersen-bls-chained`)
+
+- Message digest: `sha256(previous_signature || uint64(round))`
+- Chaining requirement: caller must provide previous round signature bytes
+- Signature group: **G2**
+- Public key group: **G1**
+- Library fit: not the same turnkey path as quicknet, so verifier uses precompile-oriented G2 flow for this scheme
 
 ---
 
-## Contract API
+## Technical differences at a glance
 
-### Constants / metadata
+| Property | Quicknet | Default |
+|---|---|---|
+| Contract | `DrandVerifierQuicknet` | `DrandVerifierDefault` |
+| drand scheme | `bls-unchained-g1-rfc9380` | `pedersen-bls-chained` |
+| Hash input | `round` | `previous_signature + round` |
+| Signature bytes accepted | 48 (compressed) / 96 (uncompressed) | 192 (uncompressed G2) |
+| Signature group | G1 | G2 |
+| Public key group | G2 | G1 |
+| Offchain preprocessing | Optional (decompress) | Usually required (decompress drand compressed G2 to uncompressed) |
 
-- `DST() -> string`
-- `COMPRESSED_SIG_LENGTH() -> uint256` (48)
-- `UNCOMPRESSED_SIG_LENGTH() -> uint256` (96)
-- `PUBLIC_KEY() -> BLS2.PointG2`
+---
 
-### Core functions
+## Practical integration differences
+
+### Integrating quicknet
+
+1. Fetch round and signature from quicknet API.
+2. Optionally call `decompressSignature(...)` offchain if you received compressed form.
+3. Call `verify(round, sig)`.
+
+### Integrating default network
+
+1. Fetch `round`, `signature`, and `previous_signature` from default-chain API.
+2. Convert drand compressed G2 signature to 192-byte uncompressed form offchain.
+3. Call `verify(round, previousSignature, uncompressedSignature)`.
+
+If you omit or mismatch `previous_signature`, verification should fail by design.
+
+---
+
+## APIs
+
+### `DrandVerifierQuicknet`
 
 - `roundMessageHash(uint64 round) -> bytes32`
-  - Computes the quicknet round digest used by this verifier.
-
 - `verify(uint64 round, bytes sig) -> bool`
-  - Returns `true` if `sig` is a valid quicknet signature for `round`.
-  - `sig` may be 48-byte compressed or 96-byte uncompressed.
-  - Returns `false` on invalid length/signature.
-  - May revert for malformed compressed encodings (library-level validation behavior).
-
 - `decompressSignature(bytes compressedSig) -> bytes`
-  - Converts a 48-byte compressed G1 signature to 96-byte uncompressed form.
-  - Intended for offchain `eth_call` usage.
-  - Reverts on invalid compressed input.
+- metadata/constants: `DST`, `COMPRESSED_G1_SIG_LENGTH`, `UNCOMPRESSED_G1_SIG_LENGTH`, `PUBLIC_KEY`
+
+### `DrandVerifierDefault`
+
+- `roundMessageHash(uint64 round, bytes previousSignature) -> bytes32`
+- `verify(uint64 round, bytes previousSignature, bytes signature) -> bool`
+- metadata/constants: `DST`, `COMPRESSED_G2_SIG_LENGTH`, `UNCOMPRESSED_G2_SIG_LENGTH`, `PUBLIC_KEY`
 
 ---
 
-## Why uncompressed signatures can be cheaper to verify
+## Test strategy
 
-Compressed signatures require decompression before pairing checks. In this setup, the decompression path can be more expensive than submitting uncompressed signatures directly.
-
-Typical integration pattern:
-
-1. Fetch signature from drand API (compressed hex string).
-2. Offchain-call `decompressSignature(...)` once.
-3. Submit uncompressed bytes to `verify(...)`.
-
----
-
-## Test strategy in this repo
-
-`test/DrandVerifier.t.sol` includes:
-
-- Known quicknet vectors (compressed + uncompressed)
-- Wrong-round and wrong-signature negatives
-- Invalid-length and malformed compressed-encoding tests
-- Non-canonical field element rejection tests
-- Fuzz tests for bit flips and random payloads
-- Live FFI tests against latest quicknet round via drand API
+- Known vectors (positive)
+- Wrong round / wrong previous signature / wrong signature negatives
+- Adversarial malformed/non-canonical input coverage
+- Fuzzing for bit flips and random payloads
+- Live FFI tests against drand APIs
 
 ---
 
 ## FFI note
 
-`foundry.toml` currently has `ffi = true` so live API tests can execute `curl` in Foundry tests.
-
-Use care in CI/security-sensitive environments where arbitrary FFI execution is undesirable.
+`foundry.toml` enables `ffi = true` for live tests (`curl` + local conversion helpers). In CI/security-sensitive environments, disable or gate FFI appropriately.
 
 ---
 
 ## Operational caveats
 
-- This verifier depends on BLS12-381 precompile behavior used by `bls-solidity`.
-- Your deployment target must be compatible with this verification approach.
-- Contract is stateless by design: it verifies signatures only; it does not track rounds or freshness.
-- If you use this in state-changing flows, design your caller for invalid-input gas behavior and replay/freshness policy.
+- Both contracts are stateless verifiers only (no freshness tracking or replay prevention).
+- Both rely on target-chain compatibility with required BLS12-381 precompile behavior.
+- For state-changing use, caller contracts should define freshness/replay policy explicitly.
 
 ---
 
 ## Dependencies
 
-- `lib/bls-solidity` (vendored, unmodified in this project)
+- `lib/bls-solidity`
 - `lib/forge-std`
-- `lib/solady` (used for JSON parsing in live tests)
+- `lib/solady` (JSON parsing in FFI live tests)
 
 ---
+
+## References
+- [drand](https://docs.drand.love/)
 
 ## License
 
