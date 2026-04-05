@@ -9,9 +9,12 @@ interface IDrandVerifierDefault {
     function DST() external pure returns (string memory);
     function COMPRESSED_G2_SIG_LENGTH() external pure returns (uint256);
     function UNCOMPRESSED_G2_SIG_LENGTH() external pure returns (uint256);
+    function PERIOD_SECONDS() external pure returns (uint64);
+    function GENESIS_TIMESTAMP() external pure returns (uint64);
     function PUBLIC_KEY() external pure returns (BLS2.PointG1 memory);
 
     function roundMessageHash(uint64 round, bytes calldata previousSignature) external pure returns (bytes32);
+    function deriveDrandRequest(uint64 round) external view returns (string memory);
     function decompressSignature(bytes calldata compressedSig) external view returns (bytes memory);
     function verify(uint64 round, bytes calldata previousSignature, bytes calldata signature)
         external

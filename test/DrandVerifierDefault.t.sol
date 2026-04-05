@@ -14,6 +14,8 @@ contract DrandVerifierDefaultTest is Test {
     DrandVerifierDefault internal verifier;
 
     string internal constant DEFAULT_CHAIN_HASH = "8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce";
+    uint64 internal constant DEFAULT_PERIOD_SECONDS = 30;
+    uint64 internal constant DEFAULT_GENESIS_TIMESTAMP = 1595431050;
 
     uint64 internal constant ROUND_ONE = 5997160;
     bytes internal constant PREV_SIG_ONE_COMPRESSED =
@@ -114,6 +116,17 @@ contract DrandVerifierDefaultTest is Test {
             verifier.roundMessageHash(ROUND_TWO, PREV_SIG_TWO_COMPRESSED),
             0x2f85f37a934d1b91e2940221170a0963383403953995a526cd89716740e90fda
         );
+    }
+
+    function testNetworkMetadataExposesDefaultPeriodAndGenesis() public view {
+        assertEq(verifier.PERIOD_SECONDS(), DEFAULT_PERIOD_SECONDS);
+        assertEq(verifier.GENESIS_TIMESTAMP(), DEFAULT_GENESIS_TIMESTAMP);
+    }
+
+    function testDeriveDrandRequestBuildsDefaultRoundUrl() public view {
+        string memory expected =
+            "https://api.drand.sh/v2/chains/8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce/rounds/5997160";
+        assertEq(verifier.deriveDrandRequest(ROUND_ONE), expected);
     }
 
     function testDecompressSignatureReturnsExpectedUncompressedBytesRoundOne() public view {

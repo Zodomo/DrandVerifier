@@ -2,14 +2,23 @@
 pragma solidity ^0.8.34;
 
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
+import {LibString} from "lib/solady/src/utils/LibString.sol";
 import {IDrandVerifierQuicknet} from "src/interfaces/IDrandVerifierQuicknet.sol";
 
 /// @title DrandVerifierQuicknet
 /// @notice Verifies drand quicknet BLS12-381 signatures using the vendored bls-solidity library.
 /// @dev Supports drand signatures encoded either as compressed G1 (48 bytes) or uncompressed G1 (96 bytes).
 contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
+    using LibString for uint256;
+
     /// @notice Domain separation tag used by drand quicknet for hash-to-curve.
     string public constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+
+    /// @notice Quicknet beacon period in seconds.
+    uint64 public constant PERIOD_SECONDS = 3 seconds;
+
+    /// @notice Quicknet genesis Unix timestamp.
+    uint64 public constant GENESIS_TIMESTAMP = 1692803367;
 
     /// @notice Expected compressed G1 signature length in bytes.
     uint256 public constant COMPRESSED_G1_SIG_LENGTH = 48;
@@ -36,6 +45,15 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     /// @dev Quicknet uses sha256 over uint64 round encoded as 8-byte big-endian via abi.encodePacked.
     function roundMessageHash(uint64 round) public pure override returns (bytes32) {
         return sha256(abi.encodePacked(round));
+    }
+
+    /// @notice Derives the drand HTTP API request URL for a specific quicknet round.
+    /// @dev Uses explicit quicknet chain-hash addressing on API v2.
+    function deriveDrandRequest(uint64 round) public pure override returns (string memory) {
+        return string.concat(
+            "https://api.drand.sh/v2/chains/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/rounds/",
+            uint256(round).toString()
+        );
     }
 
     /// @notice Decompresses a 48-byte compressed BLS12-381 G1 signature to 96-byte uncompressed form.

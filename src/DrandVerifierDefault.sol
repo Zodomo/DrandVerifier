@@ -2,6 +2,7 @@
 pragma solidity ^0.8.34;
 
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
+import {LibString} from "lib/solady/src/utils/LibString.sol";
 import {LibBLS} from "src/LibBLS.sol";
 import {IDrandVerifierDefault} from "src/interfaces/IDrandVerifierDefault.sol";
 
@@ -10,8 +11,16 @@ import {IDrandVerifierDefault} from "src/interfaces/IDrandVerifierDefault.sol";
 /// @dev drand default network uses signatures on G2, public key on G1, and chained digest:
 ///      sha256(previous_signature || uint64(round) big-endian).
 contract DrandVerifierDefault is IDrandVerifierDefault {
+    using LibString for uint256;
+
     /// @notice Domain separation tag used by drand default network for hash-to-curve.
     string public constant DST = "BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_";
+
+    /// @notice Default network beacon period in seconds.
+    uint64 public constant PERIOD_SECONDS = 30 seconds;
+
+    /// @notice Default network genesis Unix timestamp.
+    uint64 public constant GENESIS_TIMESTAMP = 1595431050;
 
     /// @notice Expected compressed G2 signature length in bytes.
     uint256 public constant COMPRESSED_G2_SIG_LENGTH = 96;
@@ -33,6 +42,15 @@ contract DrandVerifierDefault is IDrandVerifierDefault {
     /// @dev Digest is sha256(previous_signature || uint64(round) big-endian).
     function roundMessageHash(uint64 round, bytes calldata previousSignature) public pure override returns (bytes32) {
         return sha256(abi.encodePacked(previousSignature, round));
+    }
+
+    /// @notice Derives the drand HTTP API request URL for a specific default network round.
+    /// @dev Uses explicit default chain-hash addressing on API v2.
+    function deriveDrandRequest(uint64 round) public pure override returns (string memory) {
+        return string.concat(
+            "https://api.drand.sh/v2/chains/8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce/rounds/",
+            uint256(round).toString()
+        );
     }
 
     /// @notice Decompresses a 96-byte compressed BLS12-381 G2 signature to 192-byte uncompressed form.

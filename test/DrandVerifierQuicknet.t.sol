@@ -15,6 +15,8 @@ contract DrandVerifierQuicknetTest is Test {
 
     // drand quicknet chain hash from official docs/API v2.
     string internal constant QUICKNET_CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971";
+    uint64 internal constant QUICKNET_PERIOD_SECONDS = 3;
+    uint64 internal constant QUICKNET_GENESIS_TIMESTAMP = 1692803367;
 
     // Quicknet vector from vendored bls-solidity testcases.json (round 20791007).
     uint64 internal constant ROUND_ONE = 20791007;
@@ -78,6 +80,17 @@ contract DrandVerifierQuicknetTest is Test {
         assertEq(
             verifier.roundMessageHash(ROUND_ONE), 0xeb26460c7495053b531c3d007789953c47874f3380635090554e0f68619bbbeb
         );
+    }
+
+    function testNetworkMetadataExposesQuicknetPeriodAndGenesis() public view {
+        assertEq(verifier.PERIOD_SECONDS(), QUICKNET_PERIOD_SECONDS);
+        assertEq(verifier.GENESIS_TIMESTAMP(), QUICKNET_GENESIS_TIMESTAMP);
+    }
+
+    function testDeriveDrandRequestBuildsQuicknetRoundUrl() public view {
+        string memory expected =
+            "https://api.drand.sh/v2/chains/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/rounds/20791007";
+        assertEq(verifier.deriveDrandRequest(ROUND_ONE), expected);
     }
 
     function testDecompressSignatureReturnsExpectedUncompressedBytes() public view {
