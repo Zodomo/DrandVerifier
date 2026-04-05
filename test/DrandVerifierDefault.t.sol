@@ -48,6 +48,10 @@ contract DrandVerifierDefaultTest is Test {
         assertTrue(verifier.verify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, SIG_ONE_COMPRESSED));
     }
 
+    function testSafeVerifyAcceptsKnownDefaultNetworkCompressedSignatureRoundOne() public view {
+        assertTrue(verifier.safeVerify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, SIG_ONE_COMPRESSED));
+    }
+
     function testVerifyAcceptsKnownDefaultNetworkUncompressedSignatureRoundTwo() public view {
         assertTrue(verifier.verify(ROUND_TWO, PREV_SIG_TWO_COMPRESSED, SIG_TWO_UNCOMPRESSED));
     }
@@ -75,6 +79,20 @@ contract DrandVerifierDefaultTest is Test {
     function testVerifyRejectsInvalidSignatureLength() public view {
         bytes memory invalidLengthSig = hex"1234";
         assertFalse(verifier.verify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, invalidLengthSig));
+    }
+
+    function testVerifyRejectsPreviousSignatureWithInvalidLength() public view {
+        bytes memory tooShortPrevious = bytes(PREV_SIG_ONE_COMPRESSED);
+        assembly {
+            mstore(tooShortPrevious, 95)
+        }
+
+        bytes memory tooLongPrevious = bytes.concat(PREV_SIG_ONE_COMPRESSED, bytes1(0x00));
+
+        assertFalse(verifier.verify(ROUND_ONE, tooShortPrevious, SIG_ONE_COMPRESSED));
+        assertFalse(verifier.verify(ROUND_ONE, tooLongPrevious, SIG_ONE_COMPRESSED));
+        assertFalse(verifier.safeVerify(ROUND_ONE, tooShortPrevious, SIG_ONE_COMPRESSED));
+        assertFalse(verifier.safeVerify(ROUND_ONE, tooLongPrevious, SIG_ONE_COMPRESSED));
     }
 
     function testPublicKeyReturnsExpectedDefaultCoordinates() public view {
@@ -117,12 +135,43 @@ contract DrandVerifierDefaultTest is Test {
         verifier.verify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, malformedCompressed);
     }
 
+    function testSafeVerifyRejectsWhenCompressedEncodingBitIsMissing() public view {
+        bytes memory malformedCompressed = bytes(SIG_ONE_COMPRESSED);
+        malformedCompressed[0] = bytes1(uint8(malformedCompressed[0]) & 0x7f);
+
+        assertFalse(verifier.safeVerify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, malformedCompressed));
+    }
+
     function testVerifyRevertsWhenCompressedInfinityFlagIsSet() public {
         bytes memory malformedCompressed = bytes(SIG_ONE_COMPRESSED);
         malformedCompressed[0] = bytes1(uint8(malformedCompressed[0]) | 0x40);
 
         vm.expectRevert(bytes("unsupported: point at infinity"));
         verifier.verify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, malformedCompressed);
+    }
+
+    function testSafeVerifyRejectsWhenCompressedInfinityFlagIsSet() public view {
+        bytes memory malformedCompressed = bytes(SIG_ONE_COMPRESSED);
+        malformedCompressed[0] = bytes1(uint8(malformedCompressed[0]) | 0x40);
+
+        assertFalse(verifier.safeVerify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, malformedCompressed));
+    }
+
+    function testVerifyAndSafeVerifyRejectInfinityUncompressedSignature() public view {
+        bytes memory infinityUncompressed = new bytes(192);
+
+        assertFalse(verifier.verify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, infinityUncompressed));
+        assertFalse(verifier.safeVerify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, infinityUncompressed));
+    }
+
+    function testSafeVerifyReturnsFalseWhenG2MsmPrecompileCallFails() public {
+        vm.mockCallRevert(address(0x0e), bytes4(0x00000000), bytes("mocked"));
+
+        vm.expectRevert(bytes("g2msm failed"));
+        verifier.verify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, SIG_ONE_COMPRESSED);
+        assertFalse(verifier.safeVerify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, SIG_ONE_COMPRESSED));
+
+        vm.clearMockedCalls();
     }
 
     function testVerifyRejectsCompressedSignatureWithSignBitFlipped() public view {
@@ -243,8 +292,10 @@ contract DrandVerifierDefaultTest is Test {
         signatureUncompressed[0] = bytes1(uint8(signatureUncompressed[0]) ^ 0x01);
         signatureCompressed[0] = bytes1(uint8(signatureCompressed[0]) ^ 0x01);
 
-        assertFalse(verifier.verify(round, previousSignature, signatureUncompressed));
+        _assertNotVerifiedOrReverted(round, previousSignature, signatureUncompressed);
+        assertFalse(verifier.safeVerify(round, previousSignature, signatureUncompressed));
         _assertNotVerifiedOrReverted(round, previousSignature, signatureCompressed);
+        assertFalse(verifier.safeVerify(round, previousSignature, signatureCompressed));
     }
 
     function testDecompressSignatureMatchesFFIForLatestLiveDefaultRound() public {

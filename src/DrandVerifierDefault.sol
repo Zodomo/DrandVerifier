@@ -50,12 +50,28 @@ contract DrandVerifierDefault is IDrandVerifierDefault {
     /// @param previousSig The previous round signature bytes from drand beacon payload.
     /// @param sig The current round signature bytes in compressed (96) or uncompressed (192) G2 form.
     function verify(uint64 round, bytes calldata previousSig, bytes calldata sig)
+        public
+        view
+        override
+        returns (bool)
+    {
+        if (previousSig.length != COMPRESSED_G2_SIG_LENGTH) return false;
+
+        bytes32 digest = roundMessageHash(round, previousSig);
+        return LibBLS.verifyDefaultSignature(sig, PUBLIC_KEY(), bytes(DST), digest);
+    }
+
+    /// @notice Safe wrapper around verify that returns false instead of bubbling decode/precompile reverts.
+    function safeVerify(uint64 round, bytes calldata previousSig, bytes calldata sig)
         external
         view
         override
         returns (bool)
     {
-        bytes32 digest = roundMessageHash(round, previousSig);
-        return LibBLS.verifyDefaultSignature(sig, PUBLIC_KEY(), bytes(DST), digest);
+        try this.verify(round, previousSig, sig) returns (bool verified) {
+            return verified;
+        } catch {
+            return false;
+        }
     }
 }

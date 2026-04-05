@@ -31,8 +31,13 @@ library LibBLS {
 
     // EIP-198 / EIP-2537 precompile addresses.
     uint256 private constant MODEXP_ADDRESS = 5;
+    uint256 private constant BLS12_G2MSM = 0x0e;
     uint256 private constant BLS12_PAIRING_CHECK = 0x0f;
     uint256 private constant BLS12_MAP_FP2_TO_G2 = 0x11;
+
+    // BLS12-381 prime subgroup order r.
+    uint256 private constant BLS12_SCALAR_FIELD_ORDER =
+        0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001;
 
     // -G1 generator for BLS12-381, represented as (x_hi, x_lo, y_hi, y_lo).
     uint128 private constant NEG_G1_X_HI = 0x17f1d3a73197d7942695638c4fa9ac0f;
@@ -76,6 +81,9 @@ library LibBLS {
         } else {
             return false;
         }
+
+        if (_isG2Infinity(signaturePoint)) return false;
+        if (!_isInG2Subgroup(signaturePoint)) return false;
 
         uint256[8] memory signatureWords = _pointG2ToPairingWords(signaturePoint);
         (uint256[8] memory messageWords0, uint256[8] memory messageWords1) =
@@ -708,6 +716,44 @@ library LibBLS {
         out[5] = point.y0_lo;
         out[6] = uint256(point.y1_hi);
         out[7] = point.y1_lo;
+    }
+
+    /// @notice Checks G2 subgroup membership by evaluating [r]P == infinity via BLS12_G2MSM precompile.
+    function _isInG2Subgroup(BLS2.PointG2 memory point) internal view returns (bool) {
+        uint256[8] memory pointWords = _pointG2ToPairingWords(point);
+        uint256[9] memory input = [
+            pointWords[0],
+            pointWords[1],
+            pointWords[2],
+            pointWords[3],
+            pointWords[4],
+            pointWords[5],
+            pointWords[6],
+            pointWords[7],
+            BLS12_SCALAR_FIELD_ORDER
+        ];
+
+        uint256[8] memory out;
+        bool ok;
+        assembly {
+            ok := staticcall(gas(), BLS12_G2MSM, input, 288, out, 256)
+        }
+        require(ok, "g2msm failed");
+        return _isG2InfinityWords(out);
+    }
+
+    /// @notice Checks whether a G2 point struct encodes the point at infinity.
+    function _isG2Infinity(BLS2.PointG2 memory point) internal pure returns (bool) {
+        return point.x1_hi == 0 && point.x1_lo == 0 && point.x0_hi == 0 && point.x0_lo == 0 && point.y1_hi == 0
+            && point.y1_lo == 0 && point.y0_hi == 0 && point.y0_lo == 0;
+    }
+
+    /// @notice Checks whether precompile-encoded G2 words represent point at infinity.
+    function _isG2InfinityWords(uint256[8] memory pointWords) internal pure returns (bool) {
+        for (uint256 i = 0; i < pointWords.length; i++) {
+            if (pointWords[i] != 0) return false;
+        }
+        return true;
     }
 
     /// @notice Reduces a 64-byte limb chunk inside a byte buffer modulo p in-place.

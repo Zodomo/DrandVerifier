@@ -50,6 +50,18 @@ contract LibBLSTest is Test {
         assertFalse(harness.verifyDefaultSignature(hex"", verifierDefault.PUBLIC_KEY(), DST, digest));
     }
 
+    function testVerifyDefaultSignatureRejectsWhenSubgroupCheckReturnsNonInfinity() public {
+        bytes32 digest = verifierDefault.roundMessageHash(ROUND_ONE, PREV_SIG_ONE_COMPRESSED);
+        BLS2.PointG1 memory pubkey = verifierDefault.PUBLIC_KEY();
+
+        bytes memory nonInfinity = new bytes(256);
+        nonInfinity[31] = 0x01;
+
+        vm.mockCall(address(0x0e), bytes4(0x00000000), nonInfinity);
+        assertFalse(harness.verifyDefaultSignature(SIG_ONE_COMPRESSED, pubkey, DST, digest));
+        vm.clearMockedCalls();
+    }
+
     function testG2UnmarshalCompressedRevertsOnInvalidLength() public {
         vm.expectRevert(bytes("Invalid G2 bytes length"));
         harness.g2UnmarshalCompressed(hex"1234");

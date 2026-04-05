@@ -5,7 +5,6 @@ import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 
 /// @title IDrandVerifierQuicknet
 /// @notice Interface for drand quicknet BLS12-381 verification and decompression.
-/// @dev Implemented by DrandVerifierQuicknet.
 interface IDrandVerifierQuicknet {
     function DST() external pure returns (string memory);
     function COMPRESSED_G1_SIG_LENGTH() external pure returns (uint256);
@@ -15,4 +14,5 @@ interface IDrandVerifierQuicknet {
     function roundMessageHash(uint64 round) external pure returns (bytes32);
     function decompressSignature(bytes calldata compressedSig) external view returns (bytes memory);
     function verify(uint64 round, bytes calldata sig) external view returns (bool);
+    function safeVerify(uint64 round, bytes calldata sig) external view returns (bool);
 }

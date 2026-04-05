@@ -51,7 +51,7 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     /// @param round The drand round number.
     /// @param sig The current round signature bytes in compressed (48) or uncompressed (96) G1 form.
     /// @return True when the signature is valid for the provided round and quicknet public key.
-    function verify(uint64 round, bytes calldata sig) external view override returns (bool) {
+    function verify(uint64 round, bytes calldata sig) public view override returns (bool) {
         BLS2.PointG1 memory signaturePoint;
         uint256 signatureLength = sig.length;
 
@@ -68,5 +68,14 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
 
         (bool pairingSuccess, bool callSuccess) = BLS2.verifySingle(signaturePoint, PUBLIC_KEY(), messagePoint);
         return pairingSuccess && callSuccess;
+    }
+
+    /// @notice Safe wrapper around verify that returns false instead of bubbling decode/precompile reverts.
+    function safeVerify(uint64 round, bytes calldata sig) external view override returns (bool) {
+        try this.verify(round, sig) returns (bool verified) {
+            return verified;
+        } catch {
+            return false;
+        }
     }
 }

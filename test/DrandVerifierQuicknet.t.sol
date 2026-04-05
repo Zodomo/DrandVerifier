@@ -45,6 +45,10 @@ contract DrandVerifierQuicknetTest is Test {
         assertTrue(verifier.verify(ROUND_ONE, SIG_ONE_UNCOMPRESSED));
     }
 
+    function testSafeVerifyAcceptsValidCompressedQuicknetSignature() public view {
+        assertTrue(verifier.safeVerify(ROUND_ONE, SIG_ONE_COMPRESSED));
+    }
+
     function testVerifyRejectsValidSignatureWhenRoundIsWrong() public view {
         assertFalse(verifier.verify(ROUND_ONE + 1, SIG_ONE_COMPRESSED));
         assertFalse(verifier.verify(ROUND_ONE + 1, SIG_ONE_UNCOMPRESSED));
@@ -94,12 +98,36 @@ contract DrandVerifierQuicknetTest is Test {
         verifier.verify(ROUND_ONE, malformedCompressed);
     }
 
+    function testSafeVerifyRejectsWhenCompressedEncodingBitIsMissing() public view {
+        bytes memory malformedCompressed = bytes(SIG_ONE_COMPRESSED);
+        malformedCompressed[0] = bytes1(uint8(malformedCompressed[0]) & 0x7f);
+
+        assertFalse(verifier.safeVerify(ROUND_ONE, malformedCompressed));
+    }
+
     function testVerifyRevertsWhenCompressedInfinityFlagIsSet() public {
         bytes memory malformedCompressed = bytes(SIG_ONE_COMPRESSED);
         malformedCompressed[0] = bytes1(uint8(malformedCompressed[0]) | 0x40);
 
         vm.expectRevert(bytes("unsupported: point at infinity"));
         verifier.verify(ROUND_ONE, malformedCompressed);
+    }
+
+    function testSafeVerifyRejectsWhenCompressedInfinityFlagIsSet() public view {
+        bytes memory malformedCompressed = bytes(SIG_ONE_COMPRESSED);
+        malformedCompressed[0] = bytes1(uint8(malformedCompressed[0]) | 0x40);
+
+        assertFalse(verifier.safeVerify(ROUND_ONE, malformedCompressed));
+    }
+
+    function testSafeVerifyReturnsFalseWhenModexpPrecompileCallFails() public {
+        vm.mockCallRevert(address(0x05), bytes4(0x00000000), bytes("mocked"));
+
+        vm.expectRevert();
+        verifier.verify(ROUND_ONE, SIG_ONE_COMPRESSED);
+        assertFalse(verifier.safeVerify(ROUND_ONE, SIG_ONE_COMPRESSED));
+
+        vm.clearMockedCalls();
     }
 
     function testVerifyRejectsCompressedSignatureWithSignBitFlipped() public view {
