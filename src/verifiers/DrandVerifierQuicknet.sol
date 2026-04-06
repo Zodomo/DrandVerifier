@@ -68,6 +68,25 @@ library DrandVerifierQuicknet {
         return BLS2.g1Marshal(BLS2.g1UnmarshalCompressed(compressedSig));
     }
 
+    /// @notice Decodes a raw drand quicknet JSON API response.
+    /// @dev Expects a JSON object containing `round` and hex `signature` fields.
+    function decodeAPIResponse(string memory response) internal pure returns (bool, uint64, bytes memory) {
+        JSONParserLib.Item memory root = response.parse();
+        JSONParserLib.Item memory roundItem = root.at('"round"');
+        JSONParserLib.Item memory signatureItem = root.at('"signature"');
+
+        if (roundItem.isUndefined() || signatureItem.isUndefined()) return (false, 0, bytes(""));
+        if (!roundItem.isNumber() || !signatureItem.isString()) return (false, 0, bytes(""));
+
+        uint64 round = uint64(JSONParserLib.parseUint(roundItem.value()));
+        string memory signatureHex = JSONParserLib.decodeString(signatureItem.value());
+
+        (bool decoded, bytes memory signature) = LibHex._tryDecodeHex(signatureHex);
+        if (!decoded) return (false, 0, bytes(""));
+
+        return (true, round, signature);
+    }
+
     /// @notice Verifies a drand quicknet signature for a given round.
     /// @param round The drand round number.
     /// @param sig The current round signature bytes in compressed (48) or uncompressed (96) G1 form.
@@ -88,24 +107,5 @@ library DrandVerifierQuicknet {
 
         (bool pairingSuccess, bool callSuccess) = BLS2.verifySingle(signaturePoint, PUBLIC_KEY(), messagePoint);
         return pairingSuccess && callSuccess;
-    }
-
-    /// @notice Decodes a raw drand quicknet JSON API response.
-    /// @dev Expects a JSON object containing `round` and hex `signature` fields.
-    function decodeAPIResponse(string memory response) internal pure returns (bool, uint64, bytes memory) {
-        JSONParserLib.Item memory root = response.parse();
-        JSONParserLib.Item memory roundItem = root.at('"round"');
-        JSONParserLib.Item memory signatureItem = root.at('"signature"');
-
-        if (roundItem.isUndefined() || signatureItem.isUndefined()) return (false, 0, bytes(""));
-        if (!roundItem.isNumber() || !signatureItem.isString()) return (false, 0, bytes(""));
-
-        uint64 round = uint64(JSONParserLib.parseUint(roundItem.value()));
-        string memory signatureHex = JSONParserLib.decodeString(signatureItem.value());
-
-        (bool decoded, bytes memory signature) = LibHex._tryDecodeHex(signatureHex);
-        if (!decoded) return (false, 0, bytes(""));
-
-        return (true, round, signature);
     }
 }

@@ -65,17 +65,6 @@ library DrandVerifierDefault {
         return LibBLS.decompressG2Signature(compressedSig);
     }
 
-    /// @notice Verifies a drand default network signature for a round and previous signature.
-    /// @param round The drand round number.
-    /// @param previousSig The previous round signature bytes from drand beacon payload.
-    /// @param sig The current round signature bytes in compressed (96) or uncompressed (192) G2 form.
-    function verify(uint64 round, bytes memory previousSig, bytes memory sig) internal view returns (bool) {
-        if (previousSig.length != COMPRESSED_G2_SIG_LENGTH) return false;
-
-        bytes32 digest = roundMessageHash(round, previousSig);
-        return LibBLS.verifyDefaultSignature(sig, PUBLIC_KEY(), bytes(DST), digest);
-    }
-
     /// @notice Decodes a raw drand default network JSON API response.
     /// @dev Expects a JSON object containing `round`, `previous_signature`, and hex `signature` fields.
     function decodeAPIResponse(string memory response)
@@ -105,5 +94,16 @@ library DrandVerifierDefault {
         if (!signatureDecoded) return (false, 0, bytes(""), bytes(""));
 
         return (true, round, previousSignature, signature);
+    }
+
+    /// @notice Verifies a drand default network signature for a round and previous signature.
+    /// @param round The drand round number.
+    /// @param previousSig The previous round signature bytes from drand beacon payload.
+    /// @param sig The current round signature bytes in compressed (96) or uncompressed (192) G2 form.
+    function verify(uint64 round, bytes memory previousSig, bytes memory sig) internal view returns (bool) {
+        if (previousSig.length != COMPRESSED_G2_SIG_LENGTH) return false;
+
+        bytes32 digest = roundMessageHash(round, previousSig);
+        return LibBLS.verifyDefaultSignature(sig, PUBLIC_KEY(), bytes(DST), digest);
     }
 }
