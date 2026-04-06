@@ -4,33 +4,36 @@ pragma solidity ^0.8.34;
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 import {LibString} from "lib/solady/src/utils/LibString.sol";
 import {JSONParserLib} from "lib/solady/src/utils/JSONParserLib.sol";
-import {IDrandVerifierQuicknet} from "src/interfaces/IDrandVerifierQuicknet.sol";
 
 /// @title DrandVerifierQuicknet
-/// @notice Verifies drand quicknet BLS12-381 signatures using the vendored bls-solidity library.
+/// @notice Internal verifier library for drand quicknet BLS12-381 signatures.
 /// @dev Supports drand signatures encoded either as compressed G1 (48 bytes) or uncompressed G1 (96 bytes).
-contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
+library DrandVerifierQuicknet {
     using LibString for uint256;
     using JSONParserLib for *;
 
     /// @notice Domain separation tag used by drand quicknet for hash-to-curve.
-    string public constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+    string internal constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
     /// @notice Quicknet beacon period in seconds.
-    uint64 public constant PERIOD_SECONDS = 3 seconds;
+    uint64 internal constant PERIOD_SECONDS = 3 seconds;
 
     /// @notice Quicknet genesis Unix timestamp.
-    uint64 public constant GENESIS_TIMESTAMP = 1692803367;
+    uint64 internal constant GENESIS_TIMESTAMP = 1692803367;
 
     /// @notice Expected compressed G1 signature length in bytes.
-    uint256 public constant COMPRESSED_G1_SIG_LENGTH = 48;
+    uint256 internal constant COMPRESSED_G1_SIG_LENGTH = 48;
 
     /// @notice Expected uncompressed G1 signature length in bytes.
-    uint256 public constant UNCOMPRESSED_G1_SIG_LENGTH = 96;
+    uint256 internal constant UNCOMPRESSED_G1_SIG_LENGTH = 96;
+
+    /// @notice Base drand API request URL for quicknet rounds.
+    string internal constant DRAND_API_REQUEST =
+        "https://api.drand.sh/v2/chains/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/rounds/";
 
     /// @notice Returns drand quicknet public key in G2 form.
     /// @dev Matches the quicknet key used by bls-solidity's QuicknetRegistry demo.
-    function PUBLIC_KEY() public pure override returns (BLS2.PointG2 memory) {
+    function PUBLIC_KEY() internal pure returns (BLS2.PointG2 memory) {
         return BLS2.PointG2(
             0x03cf0f2896adee7eb8b5f01fcad39122,
             0x12c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d106451,
@@ -45,17 +48,14 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
 
     /// @notice Computes the quicknet round message hash.
     /// @dev Quicknet uses sha256 over uint64 round encoded as 8-byte big-endian via abi.encodePacked.
-    function roundMessageHash(uint64 round) public pure override returns (bytes32) {
+    function roundMessageHash(uint64 round) internal pure returns (bytes32) {
         return sha256(abi.encodePacked(round));
     }
 
     /// @notice Derives the drand HTTP API request URL for a specific quicknet round.
     /// @dev Uses explicit quicknet chain-hash addressing on API v2.
-    function deriveDrandRequest(uint64 round) public pure override returns (string memory) {
-        return string.concat(
-            "https://api.drand.sh/v2/chains/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/rounds/",
-            uint256(round).toString()
-        );
+    function deriveDrandRequest(uint64 round) internal pure returns (string memory) {
+        return string.concat(DRAND_API_REQUEST, uint256(round).toString());
     }
 
     /// @notice Decompresses a 48-byte compressed BLS12-381 G1 signature to 96-byte uncompressed form.
@@ -63,7 +63,7 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     /// Reverts for invalid compressed encodings.
     /// @param compressedSig The compressed signature bytes.
     /// @return The uncompressed signature bytes.
-    function decompressSignature(bytes calldata compressedSig) external view override returns (bytes memory) {
+    function decompressSignature(bytes memory compressedSig) internal view returns (bytes memory) {
         return BLS2.g1Marshal(BLS2.g1UnmarshalCompressed(compressedSig));
     }
 
@@ -71,7 +71,7 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     /// @param round The drand round number.
     /// @param sig The current round signature bytes in compressed (48) or uncompressed (96) G1 form.
     /// @return True when the signature is valid for the provided round and quicknet public key.
-    function verify(uint64 round, bytes calldata sig) public view override returns (bool) {
+    function verify(uint64 round, bytes memory sig) internal view returns (bool) {
         BLS2.PointG1 memory signaturePoint;
         uint256 signatureLength = sig.length;
 
@@ -89,33 +89,23 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
         return pairingSuccess && callSuccess;
     }
 
-    /// @notice Safe wrapper around verify that returns false instead of bubbling decode/precompile reverts.
-    function safeVerify(uint64 round, bytes memory sig) public view override returns (bool) {
-        try this.verify(round, sig) returns (bool verified) {
-            return verified;
-        } catch {
-            return false;
-        }
-    }
-
-    /// @notice Verifies a raw drand quicknet JSON API response.
+    /// @notice Decodes a raw drand quicknet JSON API response.
     /// @dev Expects a JSON object containing `round` and hex `signature` fields.
-    /// @param response The raw drand quicknet JSON API response.
-    function verifyAPI(string calldata response) public view override returns (bool) {
+    function decodeAPIResponse(string memory response) internal pure returns (bool, uint64, bytes memory) {
         JSONParserLib.Item memory root = response.parse();
         JSONParserLib.Item memory roundItem = root.at('"round"');
         JSONParserLib.Item memory signatureItem = root.at('"signature"');
 
-        if (roundItem.isUndefined() || signatureItem.isUndefined()) return false;
-        if (!roundItem.isNumber() || !signatureItem.isString()) return false;
+        if (roundItem.isUndefined() || signatureItem.isUndefined()) return (false, 0, bytes(""));
+        if (!roundItem.isNumber() || !signatureItem.isString()) return (false, 0, bytes(""));
 
         uint64 round = uint64(JSONParserLib.parseUint(roundItem.value()));
         string memory signatureHex = JSONParserLib.decodeString(signatureItem.value());
 
         (bool decoded, bytes memory signature) = _tryDecodeHex(signatureHex);
-        if (!decoded) return false;
+        if (!decoded) return (false, 0, bytes(""));
 
-        return safeVerify(round, signature);
+        return (true, round, signature);
     }
 
     /// @notice Decodes an ASCII hex string into raw bytes.
@@ -124,7 +114,7 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     /// @param hexString Hex string to decode.
     /// @return success Whether decoding succeeded.
     /// @return decoded Decoded bytes when successful, otherwise empty bytes.
-    function _tryDecodeHex(string memory hexString) private pure returns (bool, bytes memory) {
+    function _tryDecodeHex(string memory hexString) internal pure returns (bool, bytes memory) {
         bytes memory chars = bytes(hexString);
         uint256 charsLen = chars.length;
         if (charsLen % 2 != 0) return (false, bytes(""));
@@ -145,7 +135,7 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     /// @param c ASCII character expected in `[0-9a-fA-F]`.
     /// @return valid Whether `c` is a valid hex character.
     /// @return nibble The parsed nibble value when valid.
-    function _hexNibble(bytes1 c) private pure returns (bool, uint8) {
+    function _hexNibble(bytes1 c) internal pure returns (bool, uint8) {
         uint8 v = uint8(c);
         if (v >= 48 && v <= 57) return (true, v - 48);
         if (v >= 65 && v <= 70) return (true, v - 55);

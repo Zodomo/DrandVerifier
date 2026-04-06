@@ -4,17 +4,19 @@ pragma solidity ^0.8.34;
 import {Test} from "lib/forge-std/src/Test.sol";
 import {JSONParserLib} from "lib/solady/src/utils/JSONParserLib.sol";
 
-import {DrandVerifierQuicknet} from "src/DrandVerifierQuicknet.sol";
+import {DrandOracleQuicknet} from "src/oracles/DrandOracleQuicknet.sol";
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 
 /// @notice Foundry tests for drand quicknet signature verification.
 contract DrandVerifierQuicknetTest is Test {
     using JSONParserLib for *;
 
-    DrandVerifierQuicknet internal verifier;
+    DrandOracleQuicknet internal verifier;
 
     // drand quicknet chain hash from official docs/API v2.
     string internal constant QUICKNET_CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971";
+    string internal constant QUICKNET_DRAND_API_REQUEST =
+        "https://api.drand.sh/v2/chains/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/rounds/";
     uint64 internal constant QUICKNET_PERIOD_SECONDS = 3;
     uint64 internal constant QUICKNET_GENESIS_TIMESTAMP = 1692803367;
 
@@ -34,7 +36,7 @@ contract DrandVerifierQuicknetTest is Test {
     uint256 internal constant FIELD_P_LO = 0x64774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab;
 
     function setUp() public {
-        verifier = new DrandVerifierQuicknet();
+        verifier = new DrandOracleQuicknet();
     }
 
     function testVerifyAcceptsValidCompressedQuicknetSignature() public view {
@@ -83,6 +85,7 @@ contract DrandVerifierQuicknetTest is Test {
     }
 
     function testNetworkMetadataExposesQuicknetPeriodAndGenesis() public view {
+        assertEq(verifier.DRAND_API_REQUEST(), QUICKNET_DRAND_API_REQUEST);
         assertEq(verifier.PERIOD_SECONDS(), QUICKNET_PERIOD_SECONDS);
         assertEq(verifier.GENESIS_TIMESTAMP(), QUICKNET_GENESIS_TIMESTAMP);
     }
@@ -303,7 +306,7 @@ contract DrandVerifierQuicknetTest is Test {
 
     function _assertNotVerifiedOrReverted(uint64 round, bytes memory signature) internal view {
         (bool success, bytes memory returnData) =
-            address(verifier).staticcall(abi.encodeCall(DrandVerifierQuicknet.verify, (round, signature)));
+            address(verifier).staticcall(abi.encodeCall(DrandOracleQuicknet.verify, (round, signature)));
 
         if (success) {
             assertFalse(abi.decode(returnData, (bool)));

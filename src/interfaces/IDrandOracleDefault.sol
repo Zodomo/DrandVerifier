@@ -3,10 +3,11 @@ pragma solidity ^0.8.34;
 
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 
-/// @title IDrandVerifierDefault
-/// @notice Interface for drand default network (pedersen-bls-chained) BLS12-381 verification and decompression.
-interface IDrandVerifierDefault {
+/// @title IDrandOracleDefault
+/// @notice Interface for the deployable drand default network oracle contract.
+interface IDrandOracleDefault {
     function DST() external pure returns (string memory);
+    function DRAND_API_REQUEST() external pure returns (string memory);
     function COMPRESSED_G2_SIG_LENGTH() external pure returns (uint256);
     function UNCOMPRESSED_G2_SIG_LENGTH() external pure returns (uint256);
     function PERIOD_SECONDS() external pure returns (uint64);

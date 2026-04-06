@@ -4,16 +4,18 @@ pragma solidity ^0.8.34;
 import {Test} from "lib/forge-std/src/Test.sol";
 import {JSONParserLib} from "lib/solady/src/utils/JSONParserLib.sol";
 
-import {DrandVerifierDefault} from "src/DrandVerifierDefault.sol";
+import {DrandOracleDefault} from "src/oracles/DrandOracleDefault.sol";
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 
 /// @notice Foundry tests for drand default network signature verification.
 contract DrandVerifierDefaultTest is Test {
     using JSONParserLib for *;
 
-    DrandVerifierDefault internal verifier;
+    DrandOracleDefault internal verifier;
 
     string internal constant DEFAULT_CHAIN_HASH = "8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce";
+    string internal constant DEFAULT_DRAND_API_REQUEST =
+        "https://api.drand.sh/v2/chains/8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce/rounds/";
     uint64 internal constant DEFAULT_PERIOD_SECONDS = 30;
     uint64 internal constant DEFAULT_GENESIS_TIMESTAMP = 1595431050;
 
@@ -37,7 +39,7 @@ contract DrandVerifierDefaultTest is Test {
     uint256 internal constant FIELD_P_LO = 0x64774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab;
 
     function setUp() public {
-        verifier = new DrandVerifierDefault();
+        verifier = new DrandOracleDefault();
     }
 
     function testVerifyAcceptsKnownDefaultNetworkUncompressedSignatureRoundOne() public view {
@@ -119,6 +121,7 @@ contract DrandVerifierDefaultTest is Test {
     }
 
     function testNetworkMetadataExposesDefaultPeriodAndGenesis() public view {
+        assertEq(verifier.DRAND_API_REQUEST(), DEFAULT_DRAND_API_REQUEST);
         assertEq(verifier.PERIOD_SECONDS(), DEFAULT_PERIOD_SECONDS);
         assertEq(verifier.GENESIS_TIMESTAMP(), DEFAULT_GENESIS_TIMESTAMP);
     }
@@ -448,7 +451,7 @@ contract DrandVerifierDefaultTest is Test {
         view
     {
         (bool success, bytes memory returnData) = address(verifier)
-            .staticcall(abi.encodeCall(DrandVerifierDefault.verify, (round, previousSignature, signature)));
+            .staticcall(abi.encodeCall(DrandOracleDefault.verify, (round, previousSignature, signature)));
 
         if (success) {
             assertFalse(abi.decode(returnData, (bool)));

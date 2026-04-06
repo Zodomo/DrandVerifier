@@ -4,13 +4,13 @@ pragma solidity ^0.8.34;
 import {Test} from "lib/forge-std/src/Test.sol";
 
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
-import {DrandVerifierDefault} from "src/DrandVerifierDefault.sol";
-import {LibBLS} from "src/LibBLS.sol";
-import {LibBLSHarness} from "test/LibBLSHarness.sol";
+import {DrandOracleDefault} from "src/oracles/DrandOracleDefault.sol";
+import {LibBLS} from "src/utils/LibBLS.sol";
+import {LibBLSHarness} from "test/utils/LibBLSHarness.sol";
 
 contract LibBLSTest is Test {
     LibBLSHarness internal harness;
-    DrandVerifierDefault internal verifierDefault;
+    DrandOracleDefault internal verifierDefault;
 
     bytes internal constant DST = bytes("BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_NUL_");
 
@@ -29,7 +29,7 @@ contract LibBLSTest is Test {
 
     function setUp() public {
         harness = new LibBLSHarness();
-        verifierDefault = new DrandVerifierDefault();
+        verifierDefault = new DrandOracleDefault();
     }
 
     function testDecompressG2SignatureMatchesKnownVector() public view {

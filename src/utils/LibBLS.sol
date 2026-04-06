@@ -6,7 +6,7 @@ import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 /// @title LibBLS
 /// @notice Internal BLS12-381 utilities for drand default network verification.
 /// @dev Provides compressed G2 decoding, Fp/Fp2 arithmetic helpers, hash-to-G2 mapping,
-///      and pairing-precompile wiring used by DrandVerifierDefault.
+///      and pairing-precompile wiring used by Drand verifier/oracle implementations.
 library LibBLS {
     uint256 internal constant COMPRESSED_G2_SIG_LENGTH = 96;
     uint256 internal constant UNCOMPRESSED_G2_SIG_LENGTH = 192;

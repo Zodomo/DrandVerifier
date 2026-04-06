@@ -3,10 +3,11 @@ pragma solidity ^0.8.34;
 
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 
-/// @title IDrandVerifierQuicknet
-/// @notice Interface for drand quicknet BLS12-381 verification and decompression.
-interface IDrandVerifierQuicknet {
+/// @title IDrandOracleQuicknet
+/// @notice Interface for the deployable drand quicknet oracle contract.
+interface IDrandOracleQuicknet {
     function DST() external pure returns (string memory);
+    function DRAND_API_REQUEST() external pure returns (string memory);
     function COMPRESSED_G1_SIG_LENGTH() external pure returns (uint256);
     function UNCOMPRESSED_G1_SIG_LENGTH() external pure returns (uint256);
     function PERIOD_SECONDS() external pure returns (uint64);
