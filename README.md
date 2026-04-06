@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="DrandVerifier logo" width="50%" />
+</p>
+
 # DrandVerifier
 
 Stateless Solidity verifiers for two drand BLS12-381 networks:
