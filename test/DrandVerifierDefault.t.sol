@@ -129,6 +129,67 @@ contract DrandVerifierDefaultTest is Test {
         assertEq(verifier.deriveDrandRequest(ROUND_ONE), expected);
     }
 
+    function testVerifyAPIAcceptsValidDefaultJsonPayload() public view {
+        string memory apiResponse =
+            '{"round":5997160,"previous_signature":"8e7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd63598"}';
+        assertTrue(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIRejectsValidSignatureWhenRoundInJsonIsWrong() public view {
+        string memory apiResponse =
+            '{"round":5997161,"previous_signature":"8e7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd63598"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenPreviousSignatureFieldMissing() public view {
+        string memory apiResponse =
+            '{"round":5997160,"signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd63598"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenRoundFieldIsNotNumber() public view {
+        string memory apiResponse =
+            '{"round":"5997160","previous_signature":"8e7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd63598"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenSignatureFieldIsNotString() public view {
+        string memory apiResponse =
+            '{"round":5997160,"previous_signature":"8e7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":12345}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenPreviousSignatureHexHasInvalidHighNibbleCharacter() public view {
+        string memory apiResponse =
+            '{"round":5997160,"previous_signature":"ge7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd63598"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenPreviousSignatureHexUsesUppercaseNibbles() public view {
+        string memory apiResponse =
+            '{"round":5997160,"previous_signature":"Ae7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd63598"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenPreviousSignatureHexHasInvalidCharacter() public view {
+        string memory apiResponse =
+            '{"round":5997160,"previous_signature":"8e7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f740g","signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd63598"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenSignatureHexHasOddLength() public view {
+        string memory apiResponse =
+            '{"round":5997160,"previous_signature":"8e7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd6359"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIRevertsOnMalformedJson() public {
+        string memory apiResponse =
+            '{"round":5997160,"previous_signature":"8e7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":"a10b5b313e7b86a17a7007cb20efd718"';
+        vm.expectRevert(JSONParserLib.ParsingFailed.selector);
+        verifier.verifyAPI(apiResponse);
+    }
+
     function testDecompressSignatureReturnsExpectedUncompressedBytesRoundOne() public view {
         bytes memory decompressed = verifier.decompressSignature(SIG_ONE_COMPRESSED);
         assertEq(decompressed, SIG_ONE_UNCOMPRESSED);
@@ -309,6 +370,12 @@ contract DrandVerifierDefaultTest is Test {
         assertTrue(verifier.verify(round, previousSignature, signatureCompressed));
     }
 
+    /// @notice Verifies the latest live default JSON payload directly via verifyAPI.
+    function testVerifyAPIAcceptsLatestLiveDefaultRoundViaFFI() public {
+        string memory response = _fetchLatestDefaultRoundApiResponse();
+        assertTrue(verifier.verifyAPI(response));
+    }
+
     /// @notice Confirms tampering a live default network signature causes verification failure.
     function testVerifyRejectsTamperedLatestLiveDefaultRoundViaFFI() public {
         (
@@ -342,13 +409,8 @@ contract DrandVerifierDefaultTest is Test {
             bytes memory signatureUncompressed
         )
     {
-        string[] memory command = new string[](3);
-        command[0] = "curl";
-        command[1] = "-fsSL";
-        command[2] = string.concat("https://api.drand.sh/", DEFAULT_CHAIN_HASH, "/public/latest");
-
-        bytes memory response = vm.ffi(command);
-        JSONParserLib.Item memory root = string(response).parse();
+        string memory apiResponse = _fetchLatestDefaultRoundApiResponse();
+        JSONParserLib.Item memory root = apiResponse.parse();
 
         round = uint64(JSONParserLib.parseUint(root.at('"round"').value()));
 
@@ -358,6 +420,16 @@ contract DrandVerifierDefaultTest is Test {
         string memory signatureCompressedHex = JSONParserLib.decodeString(root.at('"signature"').value());
         signatureCompressed = vm.parseBytes(string.concat("0x", signatureCompressedHex));
         signatureUncompressed = _decompressG2SignatureViaFFI(signatureCompressed);
+    }
+
+    function _fetchLatestDefaultRoundApiResponse() internal returns (string memory) {
+        string[] memory command = new string[](3);
+        command[0] = "curl";
+        command[1] = "-fsSL";
+        command[2] = string.concat("https://api.drand.sh/", DEFAULT_CHAIN_HASH, "/public/latest");
+
+        bytes memory response = vm.ffi(command);
+        return string(response);
     }
 
     function _decompressG2SignatureViaFFI(bytes memory compressedSig) internal returns (bytes memory) {

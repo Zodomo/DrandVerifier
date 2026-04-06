@@ -16,6 +16,7 @@ interface IDrandVerifierDefault {
     function roundMessageHash(uint64 round, bytes calldata previousSignature) external pure returns (bytes32);
     function deriveDrandRequest(uint64 round) external view returns (string memory);
     function decompressSignature(bytes calldata compressedSig) external view returns (bytes memory);
+
     function verify(uint64 round, bytes calldata previousSignature, bytes calldata signature)
         external
         view
@@ -24,4 +25,5 @@ interface IDrandVerifierDefault {
         external
         view
         returns (bool);
+    function verifyAPI(string calldata response) external view returns (bool);
 }

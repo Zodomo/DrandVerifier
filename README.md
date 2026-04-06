@@ -30,6 +30,7 @@ Security-wise, this only gives the intended “external randomness” properties
   - Accepts **compressed** (48-byte) and **uncompressed** (96-byte) G1 signatures.
   - Exposes `decompressSignature(...)` helper (compressed G1 -> uncompressed G1).
   - Exposes `deriveDrandRequest(uint64 round)` helper, returning the quicknet API URL for that round so users/integrators can easily fetch beacon signature data.
+  - Exposes `verifyAPI(string apiResponse)` helper, which parses raw drand JSON (`round` + `signature`) and verifies it via `safeVerify`.
 - `src/DrandVerifierDefault.sol`
   - Default network verifier.
   - Verifies chained beacons with `sha256(previous_signature || uint64(round))`.
@@ -37,6 +38,7 @@ Security-wise, this only gives the intended “external randomness” properties
   - Requires `previousSignature.length == 96` (compressed previous round signature bytes).
   - Uses `LibBLS` for default network signature verification.
   - Exposes `deriveDrandRequest(uint64 round)` helper, returning the default network API URL for that round so users/integrators can easily fetch beacon signature data.
+  - Exposes `verifyAPI(string apiResponse)` helper, which parses raw drand JSON (`round` + `previous_signature` + `signature`) and verifies it via `safeVerify`.
 - `src/LibBLS.sol`
   - Internal BLS12-381 helper library used by `DrandVerifierDefault`.
 - `src/interfaces/IDrandVerifierQuicknet.sol`
@@ -116,6 +118,7 @@ In this repository, `LibBLS` provides the default network-specific cryptographic
 1. Fetch round and signature from the Quicknet API.
 2. Call `verify(round, sig)` with either compressed (48-byte) or uncompressed (96-byte) signature.
 3. Use `decompressSignature(...)` offchain only if you explicitly need uncompressed bytes.
+4. Or pass raw API JSON directly to `verifyAPI(apiResponse)` for simpler integration (with extra gas for JSON parsing).
 
 ### Integrating Default network
 
@@ -123,6 +126,7 @@ In this repository, `LibBLS` provides the default network-specific cryptographic
 2. Pass `previous_signature` exactly as 96-byte compressed bytes.
 3. Call `verify(round, previousSignature, sig)` with either compressed (96-byte) or uncompressed (192-byte) signature.
 4. `decompressSignature(...)` can be used offchain when you need uncompressed form.
+5. Or pass raw API JSON directly to `verifyAPI(apiResponse)` for simpler integration (with extra gas for JSON parsing).
 
 If `previous_signature` is omitted, malformed, or from the wrong round, verification fails by design.
 
@@ -135,6 +139,7 @@ If `previous_signature` is omitted, malformed, or from the wrong round, verifica
 - `roundMessageHash(uint64 round) -> bytes32`
 - `verify(uint64 round, bytes sig) -> bool`
 - `safeVerify(uint64 round, bytes sig) -> bool`
+- `verifyAPI(string apiResponse) -> bool`
 - `decompressSignature(bytes compressedSig) -> bytes`
 - constants/metadata: `DST`, `COMPRESSED_G1_SIG_LENGTH`, `UNCOMPRESSED_G1_SIG_LENGTH`, `PUBLIC_KEY`
 
@@ -143,6 +148,7 @@ If `previous_signature` is omitted, malformed, or from the wrong round, verifica
 - `roundMessageHash(uint64 round, bytes previousSignature) -> bytes32`
 - `verify(uint64 round, bytes previousSignature, bytes signature) -> bool`
 - `safeVerify(uint64 round, bytes previousSignature, bytes signature) -> bool`
+- `verifyAPI(string apiResponse) -> bool`
 - `decompressSignature(bytes compressedSig) -> bytes`
 - constants/metadata: `DST`, `COMPRESSED_G2_SIG_LENGTH`, `UNCOMPRESSED_G2_SIG_LENGTH`, `PUBLIC_KEY`
 
@@ -216,7 +222,7 @@ In this repo that means:
 
 - `lib/bls-solidity` (still used directly by Quicknet verifier and BLS2 types)
 - `lib/forge-std`
-- `lib/solady` (JSON parsing in FFI live tests)
+- `lib/solady` (JSON parsing in verifier `verifyAPI(...)` helpers and FFI live tests)
 
 ---
 

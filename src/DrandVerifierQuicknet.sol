@@ -3,6 +3,7 @@ pragma solidity ^0.8.34;
 
 import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
 import {LibString} from "lib/solady/src/utils/LibString.sol";
+import {JSONParserLib} from "lib/solady/src/utils/JSONParserLib.sol";
 import {IDrandVerifierQuicknet} from "src/interfaces/IDrandVerifierQuicknet.sol";
 
 /// @title DrandVerifierQuicknet
@@ -10,6 +11,7 @@ import {IDrandVerifierQuicknet} from "src/interfaces/IDrandVerifierQuicknet.sol"
 /// @dev Supports drand signatures encoded either as compressed G1 (48 bytes) or uncompressed G1 (96 bytes).
 contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     using LibString for uint256;
+    using JSONParserLib for *;
 
     /// @notice Domain separation tag used by drand quicknet for hash-to-curve.
     string public constant DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
@@ -88,11 +90,66 @@ contract DrandVerifierQuicknet is IDrandVerifierQuicknet {
     }
 
     /// @notice Safe wrapper around verify that returns false instead of bubbling decode/precompile reverts.
-    function safeVerify(uint64 round, bytes calldata sig) external view override returns (bool) {
+    function safeVerify(uint64 round, bytes memory sig) public view override returns (bool) {
         try this.verify(round, sig) returns (bool verified) {
             return verified;
         } catch {
             return false;
         }
+    }
+
+    /// @notice Verifies a raw drand quicknet JSON API response.
+    /// @dev Expects a JSON object containing `round` and hex `signature` fields.
+    /// @param response The raw drand quicknet JSON API response.
+    function verifyAPI(string calldata response) public view override returns (bool) {
+        JSONParserLib.Item memory root = response.parse();
+        JSONParserLib.Item memory roundItem = root.at('"round"');
+        JSONParserLib.Item memory signatureItem = root.at('"signature"');
+
+        if (roundItem.isUndefined() || signatureItem.isUndefined()) return false;
+        if (!roundItem.isNumber() || !signatureItem.isString()) return false;
+
+        uint64 round = uint64(JSONParserLib.parseUint(roundItem.value()));
+        string memory signatureHex = JSONParserLib.decodeString(signatureItem.value());
+
+        (bool decoded, bytes memory signature) = _tryDecodeHex(signatureHex);
+        if (!decoded) return false;
+
+        return safeVerify(round, signature);
+    }
+
+    /// @notice Decodes an ASCII hex string into raw bytes.
+    /// @dev Returns `(false, "")` when length is odd or any nibble is not `[0-9a-fA-F]`.
+    /// The input is expected without a `0x` prefix.
+    /// @param hexString Hex string to decode.
+    /// @return success Whether decoding succeeded.
+    /// @return decoded Decoded bytes when successful, otherwise empty bytes.
+    function _tryDecodeHex(string memory hexString) private pure returns (bool, bytes memory) {
+        bytes memory chars = bytes(hexString);
+        uint256 charsLen = chars.length;
+        if (charsLen % 2 != 0) return (false, bytes(""));
+
+        bytes memory out = new bytes(charsLen / 2);
+        for (uint256 i = 0; i < charsLen; i += 2) {
+            (bool okHi, uint8 hi) = _hexNibble(chars[i]);
+            if (!okHi) return (false, bytes(""));
+            (bool okLo, uint8 lo) = _hexNibble(chars[i + 1]);
+            if (!okLo) return (false, bytes(""));
+            out[i / 2] = bytes1((hi << 4) | lo);
+        }
+
+        return (true, out);
+    }
+
+    /// @notice Converts a single ASCII hex character into its 4-bit value.
+    /// @param c ASCII character expected in `[0-9a-fA-F]`.
+    /// @return valid Whether `c` is a valid hex character.
+    /// @return nibble The parsed nibble value when valid.
+    function _hexNibble(bytes1 c) private pure returns (bool, uint8) {
+        uint8 v = uint8(c);
+        if (v >= 48 && v <= 57) return (true, v - 48);
+        if (v >= 65 && v <= 70) return (true, v - 55);
+        if (v >= 97 && v <= 102) return (true, v - 87);
+        return (false, 0);
     }
 }

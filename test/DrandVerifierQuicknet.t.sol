@@ -93,6 +93,64 @@ contract DrandVerifierQuicknetTest is Test {
         assertEq(verifier.deriveDrandRequest(ROUND_ONE), expected);
     }
 
+    function testVerifyAPIAcceptsValidQuicknetJsonPayload() public view {
+        string memory apiResponse =
+            '{"round":20791007,"signature":"8d2c8bbc37170dbacc5e280a21d4e195cff5f32a19fd6a58633fa4e4670478b5fb39bc13dd8f8c4372c5a76191198ac5"}';
+        assertTrue(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIRejectsValidSignatureWhenRoundInJsonIsWrong() public view {
+        string memory apiResponse =
+            '{"round":20791008,"signature":"8d2c8bbc37170dbacc5e280a21d4e195cff5f32a19fd6a58633fa4e4670478b5fb39bc13dd8f8c4372c5a76191198ac5"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenSignatureFieldMissing() public view {
+        string memory apiResponse = '{"round":20791007}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenRoundFieldIsNotNumber() public view {
+        string memory apiResponse =
+            '{"round":"20791007","signature":"8d2c8bbc37170dbacc5e280a21d4e195cff5f32a19fd6a58633fa4e4670478b5fb39bc13dd8f8c4372c5a76191198ac5"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenSignatureFieldIsNotString() public view {
+        string memory apiResponse = '{"round":20791007,"signature":12345}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenSignatureHexHasInvalidHighNibbleCharacter() public view {
+        string memory apiResponse =
+            '{"round":20791007,"signature":"gd2c8bbc37170dbacc5e280a21d4e195cff5f32a19fd6a58633fa4e4670478b5fb39bc13dd8f8c4372c5a76191198ac5"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenSignatureHexUsesUppercaseNibbles() public view {
+        string memory apiResponse =
+            '{"round":20791007,"signature":"Ad2c8bbc37170dbacc5e280a21d4e195cff5f32a19fd6a58633fa4e4670478b5fb39bc13dd8f8c4372c5a76191198ac5"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenSignatureHexHasInvalidCharacter() public view {
+        string memory apiResponse =
+            '{"round":20791007,"signature":"8d2c8bbc37170dbacc5e280a21d4e195cff5f32a19fd6a58633fa4e4670478b5fb39bc13dd8f8c4372c5a76191198acg"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIReturnsFalseWhenSignatureHexHasOddLength() public view {
+        string memory apiResponse =
+            '{"round":20791007,"signature":"8d2c8bbc37170dbacc5e280a21d4e195cff5f32a19fd6a58633fa4e4670478b5fb39bc13dd8f8c4372c5a76191198ac"}';
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIRevertsOnMalformedJson() public {
+        string memory apiResponse = '{"round":20791007,"signature":"8d2c8bbc37170dbacc5e280a21d4e195"';
+        vm.expectRevert(JSONParserLib.ParsingFailed.selector);
+        verifier.verifyAPI(apiResponse);
+    }
+
     function testDecompressSignatureReturnsExpectedUncompressedBytes() public view {
         bytes memory decompressed = verifier.decompressSignature(SIG_ONE_COMPRESSED);
         assertEq(decompressed, SIG_ONE_UNCOMPRESSED);
@@ -209,6 +267,12 @@ contract DrandVerifierQuicknetTest is Test {
         assertTrue(verifier.verify(round, signature));
     }
 
+    /// @notice Verifies the latest live quicknet JSON payload directly via verifyAPI.
+    function testVerifyAPIAcceptsLatestLiveDrandRoundViaFFI() public {
+        string memory response = _fetchLatestDrandRoundApiResponse();
+        assertTrue(verifier.verifyAPI(response));
+    }
+
     /// @notice Confirms tampering a live drand signature causes verification failure.
     function testVerifyRejectsTamperedLatestLiveDrandRoundViaFFI() public {
         (uint64 round, bytes memory signature) = _fetchLatestDrandRoundFromApi();
@@ -217,19 +281,24 @@ contract DrandVerifierQuicknetTest is Test {
     }
 
     function _fetchLatestDrandRoundFromApi() internal returns (uint64 round, bytes memory signature) {
-        string[] memory command = new string[](3);
-        command[0] = "curl";
-        command[1] = "-fsSL";
-        command[2] = string.concat("https://api.drand.sh/v2/chains/", QUICKNET_CHAIN_HASH, "/rounds/latest");
-
-        bytes memory response = vm.ffi(command);
-        JSONParserLib.Item memory root = string(response).parse();
+        string memory apiResponse = _fetchLatestDrandRoundApiResponse();
+        JSONParserLib.Item memory root = apiResponse.parse();
 
         round = uint64(JSONParserLib.parseUint(root.at('"round"').value()));
 
         // The API returns signature as a JSON string without 0x; decode and prefix for vm.parseBytes.
         string memory signatureHex = JSONParserLib.decodeString(root.at('"signature"').value());
         signature = vm.parseBytes(string.concat("0x", signatureHex));
+    }
+
+    function _fetchLatestDrandRoundApiResponse() internal returns (string memory) {
+        string[] memory command = new string[](3);
+        command[0] = "curl";
+        command[1] = "-fsSL";
+        command[2] = string.concat("https://api.drand.sh/v2/chains/", QUICKNET_CHAIN_HASH, "/rounds/latest");
+
+        bytes memory response = vm.ffi(command);
+        return string(response);
     }
 
     function _assertNotVerifiedOrReverted(uint64 round, bytes memory signature) internal view {
