@@ -11,7 +11,7 @@ Stateless Solidity drand verification stack for two BLS12-381 networks:
 
 The project currently uses both vendored `bls-solidity` (`BLS2`) and an in-repo internal library (`LibBLS`) for cryptographic operations.
 
-**DISCLAIMER:** This code has not been professionally audited. It was developed with the use of AI for implementing the cryptography in `LibBLS.sol` as well as properly implementing `bls-solidity`'s `BLS2` library. I also audited the code extensively with multiple AI-assisted approaches. I implemented enough test cases to achieve 100% coverage, and then I implemented even more cases specifically with an adversarial approach. I personally believe the code is good, but do your own due diligence, and include these contracts in your audit scope if you get one.
+**DISCLAIMER:** This code has not been professionally audited. It was developed, tested, and self-audited with AI. The `bls-solidity` library may have been audited, but include any of this within your audit scope if you're getting one.
 
 ---
 
@@ -19,7 +19,7 @@ The project currently uses both vendored `bls-solidity` (`BLS2`) and an in-repo 
 
 For many apps, the value is not just “getting randomness”, but getting randomness that is publicly retrievable and independently verifiable without a privileged oracle callback path.
 
-With drand, beacon data is public (`round`, `signature`) and can be fetched from public endpoints, then submitted onchain by anyone. That means integrators are not forced into a provider-managed callback flow with subscription/premium mechanics, and users can still supply signature data directly (including via a block explorer) if a frontend is unavailable. In this model, you pay normal transaction gas for your own app flow and verification, not an additional oracle fulfillment callback into your contract. You can then use this signature as a random number.
+With drand, beacon data is public (`round`, `signature`) and can be fetched from public endpoints, then submitted onchain by anyone. That means integrators are not forced into a provider-managed callback flow with subscription/premium mechanics, and users can still supply signature data directly (including via a block explorer) if a frontend is unavailable. In this model, you pay normal transaction gas for your own app flow and verification, not an additional oracle fulfillment callback into your contract. You can then use this signature as a random number after hashing it.
 
 Security-wise, this only gives the intended “external randomness” properties if integration is done correctly: commit to a specific future round before reveal, stop accepting user inputs that could be adapted after commitment, and enforce freshness/replay policy in the consuming contract.
 
