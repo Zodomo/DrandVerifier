@@ -21,4 +21,5 @@ interface IDrandOracleQuicknet {
     function verify(uint64 round, bytes calldata sig) external view returns (bool);
     function safeVerify(uint64 round, bytes calldata sig) external view returns (bool);
     function verifyAPI(string calldata response) external view returns (bool);
+    function verifyNormalized(uint64 round, bytes calldata sig) external view returns (bool, bytes32, bytes32);
 }

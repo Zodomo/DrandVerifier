@@ -17,7 +17,7 @@ The project currently uses both vendored `bls-solidity` (`BLS2`) and an in-repo 
 
 ## Why verify drand signatures onchain?
 
-For many apps, the value is not just “getting randomness”, but getting randomness that is publicly retrievable and independently verifiable without a privileged oracle callback path.
+For many apps, the value is not just “getting a provably random value", but getting randomness that is publicly retrievable and independently verifiable without a privileged oracle callback path. This is randomness your users can copy and paste into your app.
 
 With drand, beacon data is public (`round`, `signature`) and can be fetched from public endpoints, then submitted onchain by anyone. That means integrators are not forced into a provider-managed callback flow with subscription/premium mechanics, and users can still supply signature data directly (including via a block explorer) if a frontend is unavailable. In this model, you pay normal transaction gas for your own app flow and verification, not an additional oracle fulfillment callback into your contract. You can then use this signature as a random number after hashing it.
 
@@ -120,6 +120,7 @@ In this repository, `LibBLS` provides the default network-specific cryptographic
 3. Use `decompressSignature(...)` offchain only if you explicitly need uncompressed bytes.
 4. Or pass raw API JSON directly to `verifyAPI(apiResponse)` for simpler integration (with extra gas for JSON parsing).
 5. Use `safeVerify` if you want to ensure no reverts occur due to malformed signature data or precompile failures, and return false instead.
+6. Use `verifyNormalized(round, sig)` when you need consistent randomness outputs across compressed/uncompressed signature representations.
 
 ### Integrating Default network
 
@@ -129,6 +130,7 @@ In this repository, `LibBLS` provides the default network-specific cryptographic
 4. `decompressSignature(...)` can be used offchain when you need uncompressed form.
 5. Or pass raw API JSON directly to `verifyAPI(apiResponse)` for simpler integration (with extra gas for JSON parsing).
 6. Use `safeVerify` if you want to ensure no reverts occur due to malformed signature data or precompile failures, and return false instead.
+7. Use `verifyNormalized(round, previousSignature, sig)` when you need consistent randomness outputs across compressed/uncompressed signature representations.
 
 If `previous_signature` is omitted, malformed, or from the wrong round, verification fails by design.
 
@@ -142,6 +144,7 @@ If `previous_signature` is omitted, malformed, or from the wrong round, verifica
 - `verify(uint64 round, bytes sig) -> bool`
 - `safeVerify(uint64 round, bytes sig) -> bool`
 - `verifyAPI(string apiResponse) -> bool`
+- `verifyNormalized(uint64 round, bytes sig) -> (bool verified, bytes32 normalizedRoundHash, bytes32 chainScopedHash)`
 - `decompressSignature(bytes compressedSig) -> bytes`
 - constants/metadata: `DST`, `COMPRESSED_G1_SIG_LENGTH`, `UNCOMPRESSED_G1_SIG_LENGTH`, `PUBLIC_KEY`
 
@@ -151,6 +154,7 @@ If `previous_signature` is omitted, malformed, or from the wrong round, verifica
 - `verify(uint64 round, bytes previousSignature, bytes signature) -> bool`
 - `safeVerify(uint64 round, bytes previousSignature, bytes signature) -> bool`
 - `verifyAPI(string apiResponse) -> bool`
+- `verifyNormalized(uint64 round, bytes previousSignature, bytes signature) -> (bool verified, bytes32 normalizedRoundHash, bytes32 chainScopedHash)`
 - `decompressSignature(bytes compressedSig) -> bytes`
 - constants/metadata: `DST`, `COMPRESSED_G2_SIG_LENGTH`, `UNCOMPRESSED_G2_SIG_LENGTH`, `PUBLIC_KEY`
 
@@ -179,6 +183,18 @@ If `previous_signature` is omitted, malformed, or from the wrong round, verifica
 - Both rely on target-chain support for required BLS12-381 precompiles included in the Pectra hard fork.
 - Quicknet and Default use different precompile paths. Chain compatibility must be validated for your deployment target.
 - For state-changing use, caller contracts should define freshness/replay policy explicitly.
+
+---
+
+## Normalized randomness outputs
+
+`verify(...)` only answers signature validity. If an app derives randomness directly from raw signature bytes, compressed and uncompressed encodings of the same valid point hash to different values. To avoid that integration footgun, `verifyNormalized(...)` verifies first, then hashes the canonical signature point bytes plus `round`.
+
+Both oracles return:
+- `normalizedRoundHash = keccak256(canonicalSignaturePoint || round)`
+- `chainScopedHash = keccak256(keccak256("DRAND_NORMALIZED_CHAIN_V1") || normalizedRoundHash || address(this) || block.chainid)`
+
+This gives one consistent random value (`normalizedRoundHash`) and one chain/contract-scoped value (`chainScopedHash`).
 
 ---
 
@@ -217,6 +233,7 @@ In this repo that means:
 - Enforce freshness/replay policy in your stateful consumer contract (these verifier contracts are intentionally stateless).
 - Handle round progression explicitly: drand can stall and later recover, and applications should define behavior for delayed/missed target rounds.
 - Verify chain compatibility up front: this repo’s verifiers use BLS12-381 precompile paths, while drand `evmnet` exists specifically for BN254 EVM-precompile compatibility. These verifiers do not implement drand's `evmnet` scheme.
+- Either enforce use of either compressed or uncompressed signatures, as either form will derive different random values, or used `verifyNormalized` to ensure you get a consistent result.
 
 ---
 

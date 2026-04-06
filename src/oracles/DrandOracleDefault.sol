@@ -60,4 +60,13 @@ contract DrandOracleDefault is IDrandOracleDefault {
         if (!decoded) return false;
         return safeVerify(round, previousSignature, signature);
     }
+
+    function verifyNormalized(uint64 round, bytes calldata previousSignature, bytes calldata signature)
+        public
+        view
+        override
+        returns (bool, bytes32, bytes32)
+    {
+        return DrandVerifierDefault.verifyNormalized(round, previousSignature, signature);
+    }
 }

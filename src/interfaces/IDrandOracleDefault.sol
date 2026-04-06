@@ -27,4 +27,8 @@ interface IDrandOracleDefault {
         view
         returns (bool);
     function verifyAPI(string calldata response) external view returns (bool);
+    function verifyNormalized(uint64 round, bytes calldata previousSignature, bytes calldata signature)
+        external
+        view
+        returns (bool, bytes32, bytes32);
 }

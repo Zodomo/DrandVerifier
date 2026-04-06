@@ -17,6 +17,7 @@ contract DrandVerifierQuicknetTest is Test {
     string internal constant QUICKNET_CHAIN_HASH = "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971";
     string internal constant QUICKNET_DRAND_API_REQUEST =
         "https://api.drand.sh/v2/chains/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/rounds/";
+    bytes32 internal constant DOMAIN_SEPARATOR = keccak256("DRAND_VERIFIER");
     uint64 internal constant QUICKNET_PERIOD_SECONDS = 3;
     uint64 internal constant QUICKNET_GENESIS_TIMESTAMP = 1692803367;
 
@@ -154,9 +155,58 @@ contract DrandVerifierQuicknetTest is Test {
         verifier.verifyAPI(apiResponse);
     }
 
+    function testVerifyNormalizedReturnsConsistentHashesAcrossSignatureEncodings() public view {
+        (bool compressedVerified, bytes32 compressedNormalized, bytes32 compressedChainScoped) =
+            verifier.verifyNormalized(ROUND_ONE, SIG_ONE_COMPRESSED);
+        (bool uncompressedVerified, bytes32 uncompressedNormalized, bytes32 uncompressedChainScoped) =
+            verifier.verifyNormalized(ROUND_ONE, SIG_ONE_UNCOMPRESSED);
+
+        assertTrue(compressedVerified);
+        assertTrue(uncompressedVerified);
+        assertEq(compressedNormalized, uncompressedNormalized);
+        assertEq(compressedChainScoped, uncompressedChainScoped);
+
+        bytes32 expectedNormalized = keccak256(abi.encodePacked(SIG_ONE_UNCOMPRESSED, ROUND_ONE));
+        bytes32 expectedChainScoped =
+            keccak256(abi.encodePacked(DOMAIN_SEPARATOR, expectedNormalized, address(verifier), block.chainid));
+
+        assertEq(compressedNormalized, expectedNormalized);
+        assertEq(compressedChainScoped, expectedChainScoped);
+    }
+
+    function testVerifyNormalizedReturnsZeroHashesWhenVerificationFails() public view {
+        (bool verified, bytes32 normalizedHash, bytes32 chainScopedHash) =
+            verifier.verifyNormalized(ROUND_ONE + 1, SIG_ONE_COMPRESSED);
+
+        assertFalse(verified);
+        assertEq(normalizedHash, bytes32(0));
+        assertEq(chainScopedHash, bytes32(0));
+    }
+
+    function testVerifyNormalizedReturnsZeroHashesForInvalidSignatureLength() public view {
+        (bool verified, bytes32 normalizedHash, bytes32 chainScopedHash) =
+            verifier.verifyNormalized(ROUND_ONE, hex"1234");
+
+        assertFalse(verified);
+        assertEq(normalizedHash, bytes32(0));
+        assertEq(chainScopedHash, bytes32(0));
+    }
+
     function testDecompressSignatureReturnsExpectedUncompressedBytes() public view {
         bytes memory decompressed = verifier.decompressSignature(SIG_ONE_COMPRESSED);
         assertEq(decompressed, SIG_ONE_UNCOMPRESSED);
+    }
+
+    function testBLS2UnmarshalAndUnmarshalCompressedProduceSameSignaturePoint() public view {
+        bytes memory decompressed = verifier.decompressSignature(SIG_ONE_COMPRESSED);
+
+        BLS2.PointG1 memory pointFromCompressed = BLS2.g1UnmarshalCompressed(SIG_ONE_COMPRESSED);
+        BLS2.PointG1 memory pointFromUncompressed = BLS2.g1Unmarshal(decompressed);
+
+        assertEq(pointFromCompressed.x_hi, pointFromUncompressed.x_hi);
+        assertEq(pointFromCompressed.x_lo, pointFromUncompressed.x_lo);
+        assertEq(pointFromCompressed.y_hi, pointFromUncompressed.y_hi);
+        assertEq(pointFromCompressed.y_lo, pointFromUncompressed.y_lo);
     }
 
     function testDecompressSignatureRevertsOnInvalidLength() public {

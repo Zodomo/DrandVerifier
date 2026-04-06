@@ -32,6 +32,9 @@ library DrandVerifierQuicknet {
     string internal constant DRAND_API_REQUEST =
         "https://api.drand.sh/v2/chains/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/rounds/";
 
+    /// @notice Domain separator for chain-scoped normalized random values.
+    bytes32 internal constant DOMAIN_SEPARATOR = keccak256("DRAND_VERIFIER");
+
     /// @notice Returns drand quicknet public key in G2 form.
     /// @dev Matches the quicknet key used by bls-solidity's QuicknetRegistry demo.
     function PUBLIC_KEY() internal pure returns (BLS2.PointG2 memory) {
@@ -107,5 +110,28 @@ library DrandVerifierQuicknet {
 
         (bool pairingSuccess, bool callSuccess) = BLS2.verifySingle(signaturePoint, PUBLIC_KEY(), messagePoint);
         return pairingSuccess && callSuccess;
+    }
+
+    /// @notice Verifies signature and derives encoding-invariant random outputs.
+    /// @dev Returns `(verified, normalizedRoundHash, chainScopedHash)` where:
+    /// - `normalizedRoundHash = keccak256(canonicalG1SignaturePoint || round)`
+    /// - `chainScopedHash = keccak256(DOMAIN_SEPARATOR || normalizedRoundHash || address(this) || block.chainid)`
+    function verifyNormalized(uint64 round, bytes memory sig) internal view returns (bool, bytes32, bytes32) {
+        uint256 signatureLength = sig.length;
+        if (signatureLength != COMPRESSED_G1_SIG_LENGTH && signatureLength != UNCOMPRESSED_G1_SIG_LENGTH) {
+            return (false, bytes32(0), bytes32(0));
+        }
+
+        bool verified = verify(round, sig);
+        if (!verified) return (false, bytes32(0), bytes32(0));
+
+        BLS2.PointG1 memory signaturePoint =
+            signatureLength == UNCOMPRESSED_G1_SIG_LENGTH ? BLS2.g1Unmarshal(sig) : BLS2.g1UnmarshalCompressed(sig);
+
+        bytes32 normalizedRoundHash = keccak256(abi.encodePacked(BLS2.g1Marshal(signaturePoint), round));
+        bytes32 chainScopedHash =
+            keccak256(abi.encodePacked(DOMAIN_SEPARATOR, normalizedRoundHash, address(this), block.chainid));
+
+        return (true, normalizedRoundHash, chainScopedHash);
     }
 }

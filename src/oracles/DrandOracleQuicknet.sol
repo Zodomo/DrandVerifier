@@ -49,4 +49,8 @@ contract DrandOracleQuicknet is IDrandOracleQuicknet {
         if (!decoded) return false;
         return safeVerify(round, signature);
     }
+
+    function verifyNormalized(uint64 round, bytes calldata sig) public view override returns (bool, bytes32, bytes32) {
+        return DrandVerifierQuicknet.verifyNormalized(round, sig);
+    }
 }

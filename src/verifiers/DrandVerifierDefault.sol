@@ -34,6 +34,9 @@ library DrandVerifierDefault {
     string internal constant DRAND_API_REQUEST =
         "https://api.drand.sh/v2/chains/8990e7a9aaed2ffed73dbd7092123d6f289930540d7651336225dc172e51b2ce/rounds/";
 
+    /// @notice Domain separator for chain-scoped normalized random values.
+    bytes32 internal constant DOMAIN_SEPARATOR = keccak256("DRAND_VERIFIER");
+
     /// @notice Returns drand default network public key in G1 form.
     function PUBLIC_KEY() internal pure returns (BLS2.PointG1 memory) {
         return BLS2.PointG1(
@@ -105,5 +108,33 @@ library DrandVerifierDefault {
 
         bytes32 digest = roundMessageHash(round, previousSig);
         return LibBLS.verifyDefaultSignature(sig, PUBLIC_KEY(), bytes(DST), digest);
+    }
+
+    /// @notice Verifies signature and derives encoding-invariant random outputs.
+    /// @dev Returns `(verified, normalizedRoundHash, chainScopedHash)` where:
+    /// - `normalizedRoundHash = keccak256(canonicalG2SignaturePoint || round)`
+    /// - `chainScopedHash = keccak256(DOMAIN_SEPARATOR || normalizedRoundHash || address(this) || block.chainid)`
+    function verifyNormalized(uint64 round, bytes memory previousSig, bytes memory sig)
+        internal
+        view
+        returns (bool, bytes32, bytes32)
+    {
+        uint256 signatureLength = sig.length;
+        if (signatureLength != COMPRESSED_G2_SIG_LENGTH && signatureLength != UNCOMPRESSED_G2_SIG_LENGTH) {
+            return (false, bytes32(0), bytes32(0));
+        }
+
+        bool verified = verify(round, previousSig, sig);
+        if (!verified) return (false, bytes32(0), bytes32(0));
+
+        BLS2.PointG2 memory signaturePoint = signatureLength == UNCOMPRESSED_G2_SIG_LENGTH
+            ? BLS2.g2Unmarshal(sig)
+            : BLS2.g2Unmarshal(LibBLS.decompressG2Signature(sig));
+
+        bytes32 normalizedRoundHash = keccak256(abi.encodePacked(BLS2.g2Marshal(signaturePoint), round));
+        bytes32 chainScopedHash =
+            keccak256(abi.encodePacked(DOMAIN_SEPARATOR, normalizedRoundHash, address(this), block.chainid));
+
+        return (true, normalizedRoundHash, chainScopedHash);
     }
 }
