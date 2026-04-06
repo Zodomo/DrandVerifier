@@ -34,5 +34,13 @@ jobs:
       - name: Run Forge build
         run: forge build --sizes
 
+      - name: Install Python dependencies for FFI tests
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install py-ecc
+
+      - name: Verify py_ecc import
+        run: python3 -c "import py_ecc"
+
       - name: Run Forge tests
         run: forge test -vvv
