@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: VPL
 pragma solidity ^0.8.34;
 
-import {LibHex} from "src/utils/LibHex.sol";
-import {LibString} from "lib/solady/src/utils/LibString.sol";
-import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
-import {JSONParserLib} from "lib/solady/src/utils/JSONParserLib.sol";
+import {LibHex} from "../utils/LibHex.sol";
+import {LibString} from "../../lib/solady/src/utils/LibString.sol";
+import {BLS2} from "../../lib/bls-solidity/src/libraries/BLS2.sol";
+import {JSONParserLib} from "../../lib/solady/src/utils/JSONParserLib.sol";
 
 /// @title DrandVerifierQuicknet
 /// @notice Internal verifier library for drand quicknet BLS12-381 signatures.

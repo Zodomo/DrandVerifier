@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: VPL
 pragma solidity ^0.8.34;
 
-import {Test} from "lib/forge-std/src/Test.sol";
+import {Test} from "../lib/forge-std/src/Test.sol";
 
-import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
-import {DrandOracleDefault} from "src/oracles/DrandOracleDefault.sol";
-import {LibBLS} from "src/utils/LibBLS.sol";
-import {LibBLSHarness} from "test/utils/LibBLSHarness.sol";
+import {BLS2} from "../lib/bls-solidity/src/libraries/BLS2.sol";
+import {DrandOracleDefault} from "../src/oracles/DrandOracleDefault.sol";
+import {LibBLS} from "../src/utils/LibBLS.sol";
+import {LibBLSHarness} from "../test/utils/LibBLSHarness.sol";
 
 contract LibBLSTest is Test {
     LibBLSHarness internal harness;

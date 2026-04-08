@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: VPL
 pragma solidity ^0.8.34;
 
-import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
-import {IDrandOracleQuicknet} from "src/interfaces/IDrandOracleQuicknet.sol";
-import {DrandVerifierQuicknet} from "src/verifiers/DrandVerifierQuicknet.sol";
+import {BLS2} from "../../lib/bls-solidity/src/libraries/BLS2.sol";
+import {IDrandOracleQuicknet} from "../interfaces/IDrandOracleQuicknet.sol";
+import {DrandVerifierQuicknet} from "../verifiers/DrandVerifierQuicknet.sol";
 
 /// @title DrandOracleQuicknet
 /// @notice Deployable oracle contract for drand quicknet verification.

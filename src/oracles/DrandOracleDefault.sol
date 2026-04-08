@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: VPL
 pragma solidity ^0.8.34;
 
-import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
-import {IDrandOracleDefault} from "src/interfaces/IDrandOracleDefault.sol";
-import {DrandVerifierDefault} from "src/verifiers/DrandVerifierDefault.sol";
+import {BLS2} from "../../lib/bls-solidity/src/libraries/BLS2.sol";
+import {IDrandOracleDefault} from "../interfaces/IDrandOracleDefault.sol";
+import {DrandVerifierDefault} from "../verifiers/DrandVerifierDefault.sol";
 
 /// @title DrandOracleDefault
 /// @notice Deployable oracle contract for drand default network verification.

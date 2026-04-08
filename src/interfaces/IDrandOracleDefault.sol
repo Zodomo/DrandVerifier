@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: VPL
 pragma solidity ^0.8.34;
 
-import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
+import {BLS2} from "../../lib/bls-solidity/src/libraries/BLS2.sol";
 
 /// @title IDrandOracleDefault
 /// @notice Interface for the deployable drand default network oracle contract.

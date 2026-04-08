@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: VPL
 pragma solidity ^0.8.34;
 
-import {Test} from "lib/forge-std/src/Test.sol";
-import {JSONParserLib} from "lib/solady/src/utils/JSONParserLib.sol";
+import {Test} from "../lib/forge-std/src/Test.sol";
+import {JSONParserLib} from "../lib/solady/src/utils/JSONParserLib.sol";
 
-import {DrandOracleQuicknet} from "src/oracles/DrandOracleQuicknet.sol";
-import {BLS2} from "lib/bls-solidity/src/libraries/BLS2.sol";
+import {DrandOracleQuicknet} from "../src/oracles/DrandOracleQuicknet.sol";
+import {BLS2} from "../lib/bls-solidity/src/libraries/BLS2.sol";
 
 /// @notice Foundry tests for drand quicknet signature verification.
 contract DrandVerifierQuicknetTest is Test {
