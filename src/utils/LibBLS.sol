@@ -62,11 +62,12 @@ library LibBLS {
 
     /// @notice Verifies a drand default network signature against a digest and public key.
     /// @dev Accepts signature bytes in compressed (96) or uncompressed (192) G2 encodings.
+    /// Decoding, subgroup, or hash-to-curve errors can revert.
     /// @param signature The signature bytes to verify.
     /// @param pubkey The drand public key in G1 form.
     /// @param dst The domain separation tag for hash-to-curve.
     /// @param digest The 32-byte message digest to verify (already chained-hashed by caller).
-    /// @return True if parsing succeeds and pairing check validates; otherwise false.
+    /// @return True for a valid signature, false when verification fails without reverting.
     function verifyDefaultSignature(
         bytes memory signature,
         BLS2.PointG1 memory pubkey,
@@ -740,8 +741,9 @@ library LibBLS {
 
         uint256[8] memory out;
         bool ok;
+        // EIP-2537 charges 22,500 gas for one G2 point, errors burn all forwarded gas.
         assembly {
-            ok := staticcall(gas(), BLS12_G2MSM, input, 288, out, 256)
+            ok := staticcall(22500, BLS12_G2MSM, input, 288, out, 256)
         }
         require(ok, "g2msm failed");
         return _isG2InfinityWords(out);

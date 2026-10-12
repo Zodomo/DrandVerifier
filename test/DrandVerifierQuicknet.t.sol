@@ -3,9 +3,25 @@ pragma solidity ^0.8.34;
 
 import {Test} from "../lib/forge-std/src/Test.sol";
 import {JSONParserLib} from "../lib/solady/src/utils/JSONParserLib.sol";
+import {LibString} from "../lib/solady/src/utils/LibString.sol";
 
 import {DrandOracleQuicknet} from "../src/oracles/DrandOracleQuicknet.sol";
 import {BLS2} from "../lib/bls-solidity/src/libraries/BLS2.sol";
+import {DrandVerifierQuicknetLib} from "../src/verifiers/DrandVerifierQuicknetLib.sol";
+
+contract QuicknetLinkedConsumer {
+    function verifyNormalized(uint64 round, bytes memory sig) external view returns (bool, bytes32, bytes32) {
+        return DrandVerifierQuicknetLib.verifyNormalized(round, sig);
+    }
+
+    function verifyCanonical(uint64 round, bytes memory sig) external view returns (bool, bytes32, bytes memory) {
+        return DrandVerifierQuicknetLib.verifyCanonical(round, sig);
+    }
+
+    function scopedHash(bytes32 normalized) external view returns (bytes32) {
+        return DrandVerifierQuicknetLib.scopedHash(normalized);
+    }
+}
 
 /// @notice Foundry tests for drand quicknet signature verification.
 contract DrandVerifierQuicknetTest is Test {
@@ -103,6 +119,32 @@ contract DrandVerifierQuicknetTest is Test {
         assertTrue(verifier.verifyAPI(apiResponse));
     }
 
+    function testVerifyAPIRejectsRoundThatWouldWrapToSignedRound() public view {
+        string memory apiResponse = string.concat(
+            '{"round":',
+            vm.toString(uint256(ROUND_ONE) + (uint256(1) << 64)),
+            ',"signature":"',
+            LibString.toHexStringNoPrefix(SIG_ONE_COMPRESSED),
+            '"}'
+        );
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testDecodeAPIResponsePreservesMaximumUint64Round() public pure {
+        (bool decoded, uint64 round,) =
+            DrandVerifierQuicknetLib.decodeAPIResponse('{"round":18446744073709551615,"signature":"00"}');
+        assertTrue(decoded);
+        assertEq(round, type(uint64).max);
+    }
+
+    function testDecodeAPIResponseRejectsRoundAboveUint64Maximum() public pure {
+        (bool decoded, uint64 round, bytes memory signature) =
+            DrandVerifierQuicknetLib.decodeAPIResponse('{"round":18446744073709551616,"signature":"00"}');
+        assertFalse(decoded);
+        assertEq(round, 0);
+        assertEq(signature, bytes(""));
+    }
+
     function testVerifyAPIRejectsValidSignatureWhenRoundInJsonIsWrong() public view {
         string memory apiResponse =
             '{"round":20791008,"signature":"8d2c8bbc37170dbacc5e280a21d4e195cff5f32a19fd6a58633fa4e4670478b5fb39bc13dd8f8c4372c5a76191198ac5"}';
@@ -174,6 +216,45 @@ contract DrandVerifierQuicknetTest is Test {
         assertEq(compressedChainScoped, expectedChainScoped);
     }
 
+    function testLinkedVerificationScopesHashesToEachConsumer() public {
+        QuicknetLinkedConsumer first = new QuicknetLinkedConsumer();
+        QuicknetLinkedConsumer second = new QuicknetLinkedConsumer();
+        (bool firstVerified, bytes32 firstNormalized, bytes32 firstScoped) =
+            first.verifyNormalized(ROUND_ONE, SIG_ONE_COMPRESSED);
+        (bool secondVerified, bytes32 secondNormalized, bytes32 secondScoped) =
+            second.verifyNormalized(ROUND_ONE, SIG_ONE_UNCOMPRESSED);
+
+        assertTrue(firstVerified);
+        assertTrue(secondVerified);
+        assertEq(firstNormalized, keccak256(abi.encodePacked(SIG_ONE_UNCOMPRESSED, ROUND_ONE)));
+        assertEq(secondNormalized, firstNormalized);
+        assertNotEq(firstScoped, secondScoped);
+        assertEq(
+            firstScoped, keccak256(abi.encodePacked(DOMAIN_SEPARATOR, firstNormalized, address(first), block.chainid))
+        );
+        assertEq(
+            secondScoped,
+            keccak256(abi.encodePacked(DOMAIN_SEPARATOR, secondNormalized, address(second), block.chainid))
+        );
+        assertEq(first.scopedHash(firstNormalized), firstScoped);
+        assertEq(second.scopedHash(secondNormalized), secondScoped);
+
+        {
+            (bool verified, bytes32 normalized, bytes memory canonical) =
+                first.verifyCanonical(ROUND_ONE, SIG_ONE_COMPRESSED);
+            assertTrue(verified);
+            assertEq(normalized, firstNormalized);
+            assertEq(canonical, SIG_ONE_UNCOMPRESSED);
+        }
+        {
+            (bool verified, bytes32 normalized, bytes memory canonical) =
+                second.verifyCanonical(ROUND_ONE, SIG_ONE_UNCOMPRESSED);
+            assertTrue(verified);
+            assertEq(normalized, secondNormalized);
+            assertEq(canonical, SIG_ONE_UNCOMPRESSED);
+        }
+    }
+
     function testVerifyNormalizedReturnsZeroHashesWhenVerificationFails() public view {
         (bool verified, bytes32 normalizedHash, bytes32 chainScopedHash) =
             verifier.verifyNormalized(ROUND_ONE + 1, SIG_ONE_COMPRESSED);
@@ -190,6 +271,41 @@ contract DrandVerifierQuicknetTest is Test {
         assertFalse(verified);
         assertEq(normalizedHash, bytes32(0));
         assertEq(chainScopedHash, bytes32(0));
+    }
+
+    function testVerifyCanonicalReturnsAuthenticatedBytesAcrossSignatureEncodings() public view {
+        (bool compressedVerified, bytes32 compressedNormalized, bytes memory compressedCanonical) =
+            verifier.verifyCanonical(ROUND_ONE, SIG_ONE_COMPRESSED);
+        (bool uncompressedVerified, bytes32 uncompressedNormalized, bytes memory uncompressedCanonical) =
+            verifier.verifyCanonical(ROUND_ONE, SIG_ONE_UNCOMPRESSED);
+
+        bytes32 expectedNormalized = keccak256(abi.encodePacked(SIG_ONE_UNCOMPRESSED, ROUND_ONE));
+        assertTrue(compressedVerified);
+        assertTrue(uncompressedVerified);
+        assertEq(compressedCanonical, SIG_ONE_UNCOMPRESSED);
+        assertEq(uncompressedCanonical, SIG_ONE_UNCOMPRESSED);
+        assertEq(compressedNormalized, expectedNormalized);
+        assertEq(uncompressedNormalized, expectedNormalized);
+    }
+
+    function testVerifyCanonicalRejectsUnverifiedOrMalformedSignatures() public {
+        (bool verified, bytes32 normalizedHash, bytes memory canonicalSignature) =
+            verifier.verifyCanonical(ROUND_ONE + 1, SIG_ONE_COMPRESSED);
+        assertFalse(verified);
+        assertEq(normalizedHash, bytes32(0));
+        assertEq(canonicalSignature, bytes(""));
+
+        (verified, normalizedHash, canonicalSignature) = verifier.verifyCanonical(ROUND_ONE, hex"1234");
+        assertFalse(verified);
+        assertEq(normalizedHash, bytes32(0));
+        assertEq(canonicalSignature, bytes(""));
+
+        bytes memory malformed = bytes(SIG_ONE_COMPRESSED);
+        malformed[0] = bytes1(uint8(malformed[0]) & 0x7f);
+        vm.expectRevert(bytes("Invalid G1 point: not compressed"));
+        verifier.verifyCanonical(ROUND_ONE, malformed);
+        vm.expectRevert(bytes("Invalid G1 point: not compressed"));
+        verifier.verifyNormalized(ROUND_ONE, malformed);
     }
 
     function testDecompressSignatureReturnsExpectedUncompressedBytes() public view {
@@ -242,6 +358,16 @@ contract DrandVerifierQuicknetTest is Test {
         malformedCompressed[0] = bytes1(uint8(malformedCompressed[0]) | 0x40);
 
         assertFalse(verifier.safeVerify(ROUND_ONE, malformedCompressed));
+    }
+
+    function testSafeVerifyRejectsMalformedPointsWithoutExhaustingBatch() public {
+        bytes memory malformed = new bytes(96);
+        malformed[95] = 0x01; // (x, y) = (0, 1) is not on the curve.
+
+        (bool completed, bytes memory result) =
+            address(this).call{gas: 1_500_000}(abi.encodeCall(this.rejectMalformedBatch, (malformed)));
+        assertTrue(completed, "Malformed proofs exhausted caller gas");
+        assertEq(abi.decode(result, (uint256)), 4);
     }
 
     function testSafeVerifyReturnsFalseWhenModexpPrecompileCallFails() public {
@@ -331,6 +457,12 @@ contract DrandVerifierQuicknetTest is Test {
         (uint64 round, bytes memory signature) = _fetchLatestDrandRoundFromApi();
         signature[0] = bytes1(uint8(signature[0]) ^ 0x01);
         assertFalse(verifier.verify(round, signature));
+    }
+
+    function rejectMalformedBatch(bytes calldata signature) external view returns (uint256 rejected) {
+        for (uint256 i; i < 4; ++i) {
+            if (!verifier.safeVerify(ROUND_ONE, signature)) ++rejected;
+        }
     }
 
     function _fetchLatestDrandRoundFromApi() internal returns (uint64 round, bytes memory signature) {

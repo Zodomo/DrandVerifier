@@ -87,7 +87,9 @@ library DrandVerifierDefault {
             return (false, 0, bytes(""), bytes(""));
         }
 
-        uint64 round = uint64(JSONParserLib.parseUint(roundItem.value()));
+        uint256 parsedRound = JSONParserLib.parseUint(roundItem.value());
+        if (parsedRound > type(uint64).max) return (false, 0, bytes(""), bytes(""));
+        uint64 round = uint64(parsedRound);
         string memory previousHex = JSONParserLib.decodeString(previousItem.value());
         string memory signatureHex = JSONParserLib.decodeString(signatureItem.value());
 

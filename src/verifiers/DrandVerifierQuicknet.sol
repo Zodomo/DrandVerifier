@@ -4,6 +4,7 @@ pragma solidity ^0.8.34;
 import {LibHex} from "../utils/LibHex.sol";
 import {LibString} from "../../lib/solady/src/utils/LibString.sol";
 import {BLS2} from "../../lib/bls-solidity/src/libraries/BLS2.sol";
+import {BLS12_PAIRING_CHECK} from "../../lib/bls-solidity/src/libraries/Precompiles.sol";
 import {JSONParserLib} from "../../lib/solady/src/utils/JSONParserLib.sol";
 
 /// @title DrandVerifierQuicknet
@@ -81,7 +82,9 @@ library DrandVerifierQuicknet {
         if (roundItem.isUndefined() || signatureItem.isUndefined()) return (false, 0, bytes(""));
         if (!roundItem.isNumber() || !signatureItem.isString()) return (false, 0, bytes(""));
 
-        uint64 round = uint64(JSONParserLib.parseUint(roundItem.value()));
+        uint256 parsedRound = JSONParserLib.parseUint(roundItem.value());
+        if (parsedRound > type(uint64).max) return (false, 0, bytes(""));
+        uint64 round = uint64(parsedRound);
         string memory signatureHex = JSONParserLib.decodeString(signatureItem.value());
 
         (bool decoded, bytes memory signature) = LibHex._tryDecodeHex(signatureHex);
@@ -106,10 +109,30 @@ library DrandVerifierQuicknet {
             return false;
         }
 
-        BLS2.PointG1 memory messagePoint = BLS2.hashToPoint(bytes(DST), abi.encodePacked(roundMessageHash(round)));
+        return _verifyPoint(round, signaturePoint);
+    }
 
-        (bool pairingSuccess, bool callSuccess) = BLS2.verifySingle(signaturePoint, PUBLIC_KEY(), messagePoint);
-        return pairingSuccess && callSuccess;
+    /// @notice Verifies a signature and returns its normalized round hash and canonical 96-byte encoding.
+    /// @dev Decodes the signature once. Invalid signatures return `(false, 0, "")`;
+    /// malformed compressed encodings can revert.
+    function verifyCanonical(uint64 round, bytes memory sig) internal view returns (bool, bytes32, bytes memory) {
+        BLS2.PointG1 memory signaturePoint;
+        uint256 signatureLength = sig.length;
+
+        if (signatureLength == UNCOMPRESSED_G1_SIG_LENGTH) {
+            signaturePoint = BLS2.g1Unmarshal(sig);
+        } else if (signatureLength == COMPRESSED_G1_SIG_LENGTH) {
+            signaturePoint = BLS2.g1UnmarshalCompressed(sig);
+        } else {
+            return (false, bytes32(0), bytes(""));
+        }
+
+        if (!_verifyPoint(round, signaturePoint)) return (false, bytes32(0), bytes(""));
+
+        bytes memory canonicalSignature =
+            signatureLength == UNCOMPRESSED_G1_SIG_LENGTH ? sig : BLS2.g1Marshal(signaturePoint);
+        bytes32 normalizedRoundHash = keccak256(abi.encodePacked(canonicalSignature, round));
+        return (true, normalizedRoundHash, canonicalSignature);
     }
 
     /// @notice Verifies signature and derives encoding-invariant random outputs.
@@ -117,21 +140,54 @@ library DrandVerifierQuicknet {
     /// - `normalizedRoundHash = keccak256(canonicalG1SignaturePoint || round)`
     /// - `chainScopedHash = keccak256(DOMAIN_SEPARATOR || normalizedRoundHash || address(this) || block.chainid)`
     function verifyNormalized(uint64 round, bytes memory sig) internal view returns (bool, bytes32, bytes32) {
-        uint256 signatureLength = sig.length;
-        if (signatureLength != COMPRESSED_G1_SIG_LENGTH && signatureLength != UNCOMPRESSED_G1_SIG_LENGTH) {
-            return (false, bytes32(0), bytes32(0));
-        }
-
-        bool verified = verify(round, sig);
+        (bool verified, bytes32 normalizedRoundHash,) = verifyCanonical(round, sig);
         if (!verified) return (false, bytes32(0), bytes32(0));
 
-        BLS2.PointG1 memory signaturePoint =
-            signatureLength == UNCOMPRESSED_G1_SIG_LENGTH ? BLS2.g1Unmarshal(sig) : BLS2.g1UnmarshalCompressed(sig);
+        return (true, normalizedRoundHash, scopedHash(normalizedRoundHash));
+    }
 
-        bytes32 normalizedRoundHash = keccak256(abi.encodePacked(BLS2.g1Marshal(signaturePoint), round));
-        bytes32 chainScopedHash =
-            keccak256(abi.encodePacked(DOMAIN_SEPARATOR, normalizedRoundHash, address(this), block.chainid));
+    /// @notice Scopes an authenticated normalized round hash to the consuming contract and chain.
+    function scopedHash(bytes32 normalized) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(DOMAIN_SEPARATOR, normalized, address(this), block.chainid));
+    }
 
-        return (true, normalizedRoundHash, chainScopedHash);
+    function _verifyPoint(uint64 round, BLS2.PointG1 memory signaturePoint) private view returns (bool) {
+        BLS2.PointG1 memory messagePoint = BLS2.hashToPoint(bytes(DST), abi.encodePacked(roundMessageHash(round)));
+
+        BLS2.PointG2 memory publicKey = PUBLIC_KEY();
+        uint256[24] memory input = [
+            signaturePoint.x_hi,
+            signaturePoint.x_lo,
+            signaturePoint.y_hi,
+            signaturePoint.y_lo,
+            // Negated G2 generator, in EIP-2537 coefficient order.
+            0x024aa2b2f08f0a91260805272dc51051,
+            0xc6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8,
+            0x13e02b6052719f607dacd3a088274f65,
+            0x596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e,
+            0x0d1b3cc2c7027888be51d9ef691d77bc,
+            0xb679afda66c73f17f9ee3837a55024f78c71363275a75d75d86bab79f74782aa,
+            0x13fa4d4a0ad8b1ce186ed5061789213d,
+            0x993923066dddaf1040bc3ff59f825c78df74f2d75467e25e0f55f8a00fa030ed,
+            messagePoint.x_hi,
+            messagePoint.x_lo,
+            messagePoint.y_hi,
+            messagePoint.y_lo,
+            publicKey.x0_hi,
+            publicKey.x0_lo,
+            publicKey.x1_hi,
+            publicKey.x1_lo,
+            publicKey.y0_hi,
+            publicKey.y0_lo,
+            publicKey.y1_hi,
+            publicKey.y1_lo
+        ];
+        uint256[1] memory out;
+        bool callSuccess;
+        // EIP-2537 charges 102,900 gas for two pairs; invalid input burns the forwarded gas.
+        assembly {
+            callSuccess := staticcall(102900, BLS12_PAIRING_CHECK, input, 768, out, 0x20)
+        }
+        return callSuccess && out[0] != 0;
     }
 }

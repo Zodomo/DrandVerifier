@@ -3,8 +3,10 @@ pragma solidity ^0.8.34;
 
 import {Test} from "../lib/forge-std/src/Test.sol";
 import {JSONParserLib} from "../lib/solady/src/utils/JSONParserLib.sol";
+import {LibString} from "../lib/solady/src/utils/LibString.sol";
 
 import {DrandOracleDefault} from "../src/oracles/DrandOracleDefault.sol";
+import {DrandVerifierDefault} from "../src/verifiers/DrandVerifierDefault.sol";
 import {BLS2} from "../lib/bls-solidity/src/libraries/BLS2.sol";
 
 /// @notice Foundry tests for drand default network signature verification.
@@ -137,6 +139,37 @@ contract DrandVerifierDefaultTest is Test {
         string memory apiResponse =
             '{"round":5997160,"previous_signature":"8e7aa8858ef2bea93d8ef4070dfe61b812a1f627723774f5516caf2f281039b21f315dedcb949a16ccf02476fc7c0ce909f4d37fbc46736c5ad5c9c2594fa92569ed0b86c9d131e4857f65294b1a7497d00a51eda1f0e83297c162ce642f7409","signature":"a10b5b313e7b86a17a7007cb20efd71859f9013dca2103e577e6592f44a2ef99e5911a55c81451713177744273f8ad170b5362d3dc75a50aaf7d93215e370cdf875da83f5aedaf9c2dc0a9492672f7865314df86999deb706ce08a0c5bd63598"}';
         assertTrue(verifier.verifyAPI(apiResponse));
+    }
+
+    function testVerifyAPIRejectsRoundThatWouldWrapToSignedRound() public view {
+        string memory apiResponse = string.concat(
+            '{"round":',
+            vm.toString(uint256(ROUND_ONE) + (uint256(1) << 64)),
+            ',"previous_signature":"',
+            LibString.toHexStringNoPrefix(PREV_SIG_ONE_COMPRESSED),
+            '","signature":"',
+            LibString.toHexStringNoPrefix(SIG_ONE_COMPRESSED),
+            '"}'
+        );
+        assertFalse(verifier.verifyAPI(apiResponse));
+    }
+
+    function testDecodeAPIResponsePreservesMaximumUint64Round() public pure {
+        (bool decoded, uint64 round,,) = DrandVerifierDefault.decodeAPIResponse(
+            '{"round":18446744073709551615,"previous_signature":"00","signature":"00"}'
+        );
+        assertTrue(decoded);
+        assertEq(round, type(uint64).max);
+    }
+
+    function testDecodeAPIResponseRejectsRoundAboveUint64Maximum() public pure {
+        (bool decoded, uint64 round, bytes memory previousSignature, bytes memory signature) = DrandVerifierDefault.decodeAPIResponse(
+            '{"round":18446744073709551616,"previous_signature":"00","signature":"00"}'
+        );
+        assertFalse(decoded);
+        assertEq(round, 0);
+        assertEq(previousSignature, bytes(""));
+        assertEq(signature, bytes(""));
     }
 
     function testVerifyAPIRejectsValidSignatureWhenRoundInJsonIsWrong() public view {
@@ -293,6 +326,16 @@ contract DrandVerifierDefaultTest is Test {
         vm.clearMockedCalls();
     }
 
+    function testSafeVerifyRejectsMalformedPointsWithoutExhaustingBatch() public {
+        bytes memory malformed = new bytes(192);
+        malformed[191] = 0x01; // (x, y) = (0, 1) is not on the curve.
+
+        (bool completed, bytes memory result) =
+            address(this).call{gas: 1_500_000}(abi.encodeCall(this.rejectMalformedBatch, (malformed)));
+        assertTrue(completed, "Malformed proofs exhausted caller gas");
+        assertEq(abi.decode(result, (uint256)), 4);
+    }
+
     function testVerifyRejectsCompressedSignatureWithSignBitFlipped() public view {
         bytes memory tampered = bytes(SIG_ONE_COMPRESSED);
         tampered[0] = bytes1(uint8(tampered[0]) ^ 0x20);
@@ -439,6 +482,12 @@ contract DrandVerifierDefaultTest is Test {
         bytes memory fromContract = verifier.decompressSignature(signatureCompressed);
         bytes memory fromFfi = _decompressG2SignatureViaFFI(signatureCompressed);
         assertEq(fromContract, fromFfi);
+    }
+
+    function rejectMalformedBatch(bytes calldata signature) external view returns (uint256 rejected) {
+        for (uint256 i; i < 4; ++i) {
+            if (!verifier.safeVerify(ROUND_ONE, PREV_SIG_ONE_COMPRESSED, signature)) ++rejected;
+        }
     }
 
     function _fetchLatestDefaultRoundFromApi()

@@ -6,7 +6,7 @@
 
 Stateless Solidity drand verification stack for two BLS12-381 networks:
 
-- **Quicknet** (`DrandOracleQuicknet` deployable oracle, `DrandVerifierQuicknet` internal library)
+- **Quicknet** (`DrandOracleQuicknet` standalone oracle, `DrandVerifierQuicknet` internal library, `DrandVerifierQuicknetLib` linked library)
 - **Default network** (`DrandOracleDefault` deployable oracle, `DrandVerifierDefault` internal library)
 
 The project currently uses both vendored `bls-solidity` (`BLS2`) and an in-repo internal library (`LibBLS`) for cryptographic operations.
@@ -30,6 +30,9 @@ Security-wise, this only gives the intended “external randomness” properties
 - `src/verifiers/DrandVerifierQuicknet.sol`
   - Internal quicknet verifier library (for embedding in other contracts).
   - Accepts **compressed** (48-byte) and **uncompressed** (96-byte) G1 signatures.
+- `src/verifiers/DrandVerifierQuicknetLib.sol`
+  - Linked Quicknet entrypoints that reuse the internal implementation.
+  - Keeps BLS verification outside the consuming contract's bytecode.
 - `src/verifiers/DrandVerifierDefault.sol`
   - Internal default network verifier library (for embedding in other contracts).
   - Verifies chained beacons with `sha256(previous_signature || uint64(round))`.
@@ -56,10 +59,11 @@ Security-wise, this only gives the intended “external randomness” properties
 
 ## Verifier libraries vs oracle contracts
 
-The codebase separates **internal-use verification logic** from **deployable entrypoints**:
+The codebase provides three consumption modes:
 
-- `src/verifiers/*` are **libraries** with internal functions. Use these when integrating drand verification directly inside your own contracts.
-- `src/oracles/*` are **deployable contracts** that expose the same external API and are suitable when you want a standalone oracle/verifier address.
+- `DrandVerifierQuicknet` and `DrandVerifierDefault` have internal functions. The compiler embeds only the code each consumer uses.
+- `DrandVerifierQuicknetLib` exposes the Quicknet core API as external library functions. Deploy it once and link consumers to its address; library calls use `DELEGATECALL`.
+- `src/oracles/*` are standalone contracts. They use the internal implementation and do not require a linked library deployment.
 
 ### Quicknet (`bls-unchained-g1-rfc9380`)
 
@@ -67,7 +71,7 @@ The codebase separates **internal-use verification logic** from **deployable ent
 - Message digest: `sha256(uint64(round))`
 - Signature group: **G1**
 - Public key group: **G2**
-- Contract flow: `BLS2.hashToPoint(...)` on G1 + `BLS2.verifySingle(...)`
+- Contract flow: `BLS2.hashToPoint(...)` on G1 + a bounded two-pair BLS12-381 pairing check.
 
 ### Default (`pedersen-bls-chained`)
 
@@ -92,7 +96,7 @@ From an onchain randomness perspective, **both networks are functionally usable*
 
 In this repository, `LibBLS` provides the default network-specific cryptographic flow: compressed G2 decoding, canonical checks, G2 subgroup validation, hash-to-G2 mapping for the chained digest, and pairing-precompile wiring for final verification. `DrandVerifierDefault.verify(...)` computes the chained digest, then calls `LibBLS.verifyDefaultSignature(...)`, decompression paths call `LibBLS.decompressG2Signature(...)`.
 
-`LibBLS` does **not** replace Quicknet’s `BLS2` G1-verification flow. Quicknet verification still uses `BLS2` directly.
+`LibBLS` is not used by Quicknet.
 
 ---
 
@@ -107,7 +111,7 @@ In this repository, `LibBLS` provides the default network-specific cryptographic
 | Signature bytes accepted | 48 (compressed G1) / 96 (uncompressed G1) | 96 (compressed G2) / 192 (uncompressed G2) |
 | Signature group | G1 | G2 |
 | Public key group | G2 | G1 |
-| Verification backend in this repo | `bls-solidity` (`BLS2`) | `LibBLS` |
+| Verification backend in this repo | `BLS2` helpers + bounded native pairing | `LibBLS` |
 
 ---
 
@@ -119,8 +123,14 @@ In this repository, `LibBLS` provides the default network-specific cryptographic
 2. Call `verify(round, sig)` with either compressed (48-byte) or uncompressed (96-byte) signature.
 3. Use `decompressSignature(...)` offchain only if you explicitly need uncompressed bytes.
 4. Or pass raw API JSON directly to `verifyAPI(apiResponse)` for simpler integration (with extra gas for JSON parsing).
-5. Use `safeVerify` if you want to ensure no reverts occur due to malformed signature data or precompile failures, and return false instead.
+5. Use `safeVerify` to return `false` for signature-decoding or precompile failures. Callers must still supply enough gas for verification.
 6. Use `verifyNormalized(round, sig)` when you need consistent randomness outputs across compressed/uncompressed signature representations.
+
+For linked Quicknet verification, call `DrandVerifierQuicknetLib.verifyCanonical(round, sig)` and use its internal `scopedHash(normalized)` only after successful verification. Linked `verifyNormalized` scopes its output to the consuming contract and current chain, not the library address. Ordinary calls to `DrandOracleQuicknet.verifyNormalized` scope the output to the oracle instead.
+
+`safeVerify` and `verifyAPI` remain oracle entrypoints. The linked library provides verification and JSON decoding separately, malformed inputs can still revert. It does not assume that the consumer exposes a callable `verify` function.
+
+The Quicknet verifier limits its two-pair pairing precompile call to the [EIP-2537 cost](https://eips.ethereum.org/EIPS/eip-2537#gas-schedule) of 102,900 gas. Pairing failure returns `false`, malformed compressed encodings can still revert. This limit covers only the pairing call, not decoding or hash-to-curve.
 
 ### Integrating Default network
 
@@ -129,38 +139,68 @@ In this repository, `LibBLS` provides the default network-specific cryptographic
 3. Call `verify(round, previousSignature, sig)` with either compressed (96-byte) or uncompressed (192-byte) signature.
 4. `decompressSignature(...)` can be used offchain when you need uncompressed form.
 5. Or pass raw API JSON directly to `verifyAPI(apiResponse)` for simpler integration (with extra gas for JSON parsing).
-6. Use `safeVerify` if you want to ensure no reverts occur due to malformed signature data or precompile failures, and return false instead.
+6. Use `safeVerify` to return `false` for signature-decoding or precompile failures. Callers must still supply enough gas for verification.
 7. Use `verifyNormalized(round, previousSignature, sig)` when you need consistent randomness outputs across compressed/uncompressed signature representations.
 
 If `previous_signature` is omitted, malformed, or from the wrong round, verification fails by design.
+
+The Default verifier limits its single-point G2 subgroup precompile call to the [EIP-2537 cost](https://eips.ethereum.org/EIPS/eip-2537#gas-schedule) of 22,500 gas. Failure of this check still reverts through `verify` and returns `false` through `safeVerify`, but the precompile can burn no more than this allowance. This limit covers only that precompile call, callers must still provide enough gas for decoding and verification.
 
 ---
 
 ## APIs
 
+Both networks reject parsed rounds above `type(uint64).max`: `decodeAPIResponse` reports decoding failure and `verifyAPI` returns `false`. JSON parsing or conversion to `uint256` can still revert.
+
+### `DrandVerifierQuicknetLib`
+
+- External verification: `verify`, `verifyCanonical`, `verifyNormalized`.
+- External helpers: `decompressSignature`, `decodeAPIResponse`, `roundMessageHash`, `deriveDrandRequest`.
+- External metadata getters: `DST`, `DRAND_API_REQUEST`, `PERIOD_SECONDS`, `GENESIS_TIMESTAMP`, `COMPRESSED_G1_SIG_LENGTH`, `UNCOMPRESSED_G1_SIG_LENGTH`, `PUBLIC_KEY`.
+- Internal helper: `scopedHash(bytes32 normalized) -> bytes32`.
+
+Verification return values match the internal implementation. `verifyCanonical` returns `(verified, normalizedRoundHash, canonicalSignature)`. Failed verification returns zero/empty values. `scopedHash` only hashes its input, it does not verify a signature.
+
 ### `DrandOracleQuicknet`
 
 - `roundMessageHash(uint64 round) -> bytes32`
+- `deriveDrandRequest(uint64 round) -> string`
 - `verify(uint64 round, bytes sig) -> bool`
 - `safeVerify(uint64 round, bytes sig) -> bool`
 - `verifyAPI(string apiResponse) -> bool`
 - `verifyNormalized(uint64 round, bytes sig) -> (bool verified, bytes32 normalizedRoundHash, bytes32 chainScopedHash)`
+- `verifyCanonical(uint64 round, bytes sig) -> (bool verified, bytes32 normalizedRoundHash, bytes canonicalSignature)`
 - `decompressSignature(bytes compressedSig) -> bytes`
-- constants/metadata: `DST`, `COMPRESSED_G1_SIG_LENGTH`, `UNCOMPRESSED_G1_SIG_LENGTH`, `PUBLIC_KEY`
+- constants/metadata: `DST`, `DRAND_API_REQUEST`, `PERIOD_SECONDS`, `GENESIS_TIMESTAMP`, `COMPRESSED_G1_SIG_LENGTH`, `UNCOMPRESSED_G1_SIG_LENGTH`, `PUBLIC_KEY`
 
 ### `DrandOracleDefault`
 
 - `roundMessageHash(uint64 round, bytes previousSignature) -> bytes32`
+- `deriveDrandRequest(uint64 round) -> string`
 - `verify(uint64 round, bytes previousSignature, bytes signature) -> bool`
 - `safeVerify(uint64 round, bytes previousSignature, bytes signature) -> bool`
 - `verifyAPI(string apiResponse) -> bool`
 - `verifyNormalized(uint64 round, bytes previousSignature, bytes signature) -> (bool verified, bytes32 normalizedRoundHash, bytes32 chainScopedHash)`
 - `decompressSignature(bytes compressedSig) -> bytes`
-- constants/metadata: `DST`, `COMPRESSED_G2_SIG_LENGTH`, `UNCOMPRESSED_G2_SIG_LENGTH`, `PUBLIC_KEY`
+- constants/metadata: `DST`, `DRAND_API_REQUEST`, `PERIOD_SECONDS`, `GENESIS_TIMESTAMP`, `COMPRESSED_G2_SIG_LENGTH`, `UNCOMPRESSED_G2_SIG_LENGTH`, `PUBLIC_KEY`
 
 ---
 
 ## Test strategy
+
+Install [Foundry](https://getfoundry.sh/introduction/installation), Python 3, and `curl`. From the repository root, initialize dependencies and run the checks in a Python virtual environment:
+
+```bash
+git submodule update --init --recursive
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install py-ecc
+forge fmt --check
+forge build --sizes
+forge test -vv
+```
+
+Coverage includes:
 
 - Known good values
 - Wrong round / wrong previous signature / wrong signature negatives
@@ -181,7 +221,7 @@ If `previous_signature` is omitted, malformed, or from the wrong round, verifica
 
 - Both oracle contracts are stateless verifiers only (no freshness tracking or replay prevention).
 - Both rely on target-chain support for required BLS12-381 precompiles included in the Pectra hard fork.
-- Quicknet and Default use different precompile paths. Chain compatibility must be validated for your deployment target.
+- Quicknet and Default use different precompile paths. The current Foundry build targets Osaka, validate both the EVM target and required precompiles on your deployment chain.
 - For state-changing use, caller contracts should define freshness/replay policy explicitly.
 
 ---
@@ -192,9 +232,11 @@ If `previous_signature` is omitted, malformed, or from the wrong round, verifica
 
 Both oracles return:
 - `normalizedRoundHash = keccak256(canonicalSignaturePoint || round)`
-- `chainScopedHash = keccak256(keccak256("DRAND_NORMALIZED_CHAIN_V1") || normalizedRoundHash || address(this) || block.chainid)`
+- `chainScopedHash = keccak256(keccak256("DRAND_VERIFIER") || normalizedRoundHash || address(this) || block.chainid)`
 
 This gives one consistent random value (`normalizedRoundHash`) and one chain/contract-scoped value (`chainScopedHash`).
+
+Quicknet's `verifyCanonical(...)` decodes the signature once and returns its normalized hash and canonical 96-byte encoding after verification. It reuses verified uncompressed input, or marshals the verified compressed point. `verifyNormalized(...)` uses this helper without changing its hashes or return values. Failed verification returns `(false, bytes32(0), bytes(""))`, malformed compressed encodings can still revert.
 
 ---
 
@@ -205,17 +247,6 @@ This gives one consistent random value (`normalizedRoundHash`) and one chain/con
 drand nodes collectively produce threshold BLS signatures for each round. Anyone who has the network root-of-trust parameters (public key, period, genesis, scheme) can verify a beacon signature. Onchain, this contract family checks the same signature validity that offchain clients check.
 
 This gives public verifiability without trusting a single node or a private API response. The critical assumption is threshold honesty: drand’s security model states malicious control must stay below threshold for unpredictability; if an attacker controls at least threshold shares, they can derive future chain beacons, while randomness remains unbiasable. Because multiple parties are involved in signing, it is impossible for any single party to influence the final signature.
-
-### Quicknet vs Default: security and integration shape
-
-- **Quicknet (`bls-unchained-g1-rfc9380`)**: unchained mode, signatures on G1, 3s period, and per-round verification without needing previous signature bytes.
-- **Default (`pedersen-bls-chained`)**: chained mode, signatures on G2, 30s period, and verification depends on `previous_signature` linkage.
-
-Both can serve as onchain randomness sources; the practical choice is mostly integration shape and cadence: Quicknet is usually simpler/faster for new apps, while Default is chosen for chained-scheme compatibility requirements.
-
-In this repo that means:
-- `DrandOracleQuicknet` verifies a round with `(round, signature)` via the `DrandVerifierQuicknet` library.
-- `DrandOracleDefault` verifies with `(round, previousSignature, signature)` via the `DrandVerifierDefault` library and enforces `previousSignature.length == 96`.
 
 ### drand vs Chainlink VRF vs `block.prevrandao` (practical model differences)
 
@@ -233,7 +264,6 @@ In this repo that means:
 - Enforce freshness/replay policy in your stateful consumer contract (these verifier contracts are intentionally stateless).
 - Handle round progression explicitly: drand can stall and later recover, and applications should define behavior for delayed/missed target rounds.
 - Verify chain compatibility up front: this repo’s verifiers use BLS12-381 precompile paths, while drand `evmnet` exists specifically for BN254 EVM-precompile compatibility. These verifiers do not implement drand's `evmnet` scheme.
-- Either enforce use of either compressed or uncompressed signatures, as either form will derive different random values, or used `verifyNormalized` to ensure you get a consistent result.
 
 ---
 

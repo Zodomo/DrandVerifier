@@ -10,5 +10,8 @@ out/
 # Docs
 docs/
 
+# Python test environment
+.venv/
+
 # Dotenv file
 .env
